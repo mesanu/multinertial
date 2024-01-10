@@ -1,1 +1,5 @@
-*.old
+build
+*.vscode
+*.devcontainer
+*sdkconfig*
+*.log
