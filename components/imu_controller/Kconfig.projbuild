@@ -1,13 +1,13 @@
 menu "IMU Controller"
 
     config IMU_CONTROLLER_MAX_SUPPORTED_UNITS
-        string "Max IMUs"
+        int "Max IMUs"
         default 1
         help
             The maximum number of IMUs supported
 
     config IMU_CONTROLLER_SPI_BUS_FREQ
-        string "SPI bus frequency"
+        int "SPI bus frequency"
         default 10000000
         help
             The SPI bus speed for every IMU in Hz

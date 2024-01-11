@@ -68,6 +68,6 @@ typedef struct {
 
 BaseType_t IMUControllerInit(void);
 
-BaseType_t IMUControllerAddDevice(IMUConfig_t *config, void *ext);
+BaseType_t IMUControllerAddDevice(IMUConfig_t *config);
 
 #endif /* IMU_CONTROLLER_API_H */

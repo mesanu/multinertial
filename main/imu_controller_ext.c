@@ -1,7 +1,7 @@
 #include "imu_controller_ext.h"
 #include "imu_controller_api.h"
 
-#include "componentExt.h"
+#include "component_ext.h"
 
 BaseType_t IMUControllerInitExt(void) {
     return pdFALSE;
