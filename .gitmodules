@@ -1,0 +1,3 @@
+[submodule "components/ESP-IDF-BMI270-Sensor-API"]
+	path = components/ESP-IDF-BMI270-Sensor-API
+	url = https://github.com/mesanu/ESP-IDF-BMI270-Sensor-API
