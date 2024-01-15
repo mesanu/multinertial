@@ -5,6 +5,7 @@
 #include "network_controller_api.h"
 #include "driver/spi_master.h"
 #include "bmi270.h"
+#include "esp_log.h"
 
 #define PIN_NUM_MISO     7
 #define PIN_NUM_MOSI     8
@@ -25,7 +26,7 @@ static spi_device_interface_config_t SPIInterfaceConfig = {
     .clock_speed_hz = CONFIG_IMU_CONTROLLER_SPI_BUS_FREQ,
     .mode = 0,
     .spics_io_num = PIN_NUM_CS,
-    .queue_size = 6,
+    .queue_size = 1,
 };
 
 static IMUConfig_t IMUConfig = {
@@ -36,7 +37,23 @@ static IMUConfig_t IMUConfig = {
 
 void app_main(void)
 {
+    IMUAccelData_t accelData;
     spi_bus_initialize(SPI2_HOST, &busConfig, SPI_DMA_CH_AUTO);
-    IMUControllerAddDevice(&IMUConfig);
+    IMUControllerAddDevice(&IMUConfig, 0);
     IMUControllerInit();
+    IMUSetConfigAccelRange(0, BMI2_ACC_RANGE_2G);
+    IMUSetConfigAccelODR(0, BMI2_ACC_ODR_200HZ);
+    IMUSetConfigFilterBWP(0, BMI2_ACC_NORMAL_AVG4);
+    IMUSetConfigFilterPerf(0, BMI2_PERF_OPT_MODE);
+    IMUUpdateAccelSettings(0);
+    IMUSetConfigIntPin(0, BMI2_DRDY_INT, BMI2_INT1);
+    IMUEnableAccel(0);
+    while(1) {
+        IMUGetAccelData(0, &accelData);
+        ESP_LOGI("MAIN", "Accel: %f %f %f", accelData.x, accelData.y, accelData.z);
+        vTaskDelay(1000 / portTICK_PERIOD_MS);
+    }
+
+
+
 }
