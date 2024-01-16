@@ -29,28 +29,26 @@ static spi_device_interface_config_t SPIInterfaceConfig = {
     .queue_size = 1,
 };
 
-static IMUConfig_t IMUConfig = {
-    .interfaceConfig.spiHost = SPI2_HOST,
-    .interfaceConfig.spiInterfaceConfig = &SPIInterfaceConfig,
-    .interfaceConfig.spiHandle = NULL,
-};
-
 void app_main(void)
 {
-    IMUAccelData_t accelData;
+    IMUData_t data;
     spi_bus_initialize(SPI2_HOST, &busConfig, SPI_DMA_CH_AUTO);
-    IMUControllerAddDevice(&IMUConfig, 0);
+    IMUControllerConfigSetSPI(0, SPI2_HOST, PIN_NUM_CS);
     IMUControllerInit();
     IMUSetConfigAccelRange(0, BMI2_ACC_RANGE_2G);
     IMUSetConfigAccelODR(0, BMI2_ACC_ODR_200HZ);
-    IMUSetConfigFilterBWP(0, BMI2_ACC_NORMAL_AVG4);
-    IMUSetConfigFilterPerf(0, BMI2_PERF_OPT_MODE);
-    IMUUpdateAccelSettings(0);
+    IMUSetConfigAccelFilterBWP(0, BMI2_ACC_NORMAL_AVG4);
+    IMUSetConfigAccelFilterPerf(0, BMI2_PERF_OPT_MODE);
+    IMUSetConfigGyroRange(0, BMI2_GYR_RANGE_500);
+    IMUSetConfigGyroODR(0, BMI2_GYR_ODR_200HZ);
+    IMUSetConfigGyroFilterBWP(0, BMI2_GYR_NORMAL_MODE);
+    IMUSetConfigGyroFilterPerf(0, BMI2_PERF_OPT_MODE);
+    IMUUpdateIMUSettings(0);
     IMUSetConfigIntPin(0, BMI2_DRDY_INT, BMI2_INT1);
-    IMUEnableAccel(0);
+    IMUEnableIMU(0);
     while(1) {
-        IMUGetAccelData(0, &accelData);
-        ESP_LOGI("MAIN", "Accel: %f %f %f", accelData.x, accelData.y, accelData.z);
+        IMUGetData(0, &data);
+        ESP_LOGI("MAIN", "Accel: %f %f %f Gyro: %f %f %f", data.accelX, data.accelY, data.accelZ, data.gyroX, data.gyroY, data.gyroZ);
         vTaskDelay(1000 / portTICK_PERIOD_MS);
     }
 
