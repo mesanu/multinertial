@@ -4,6 +4,7 @@
 #include "imu_controller_api.h"
 #include "network_controller_api.h"
 #include "driver/spi_master.h"
+#include "driver/gpio.h"
 #include "bmi270.h"
 #include "esp_log.h"
 
@@ -11,6 +12,11 @@
 #define PIN_NUM_MOSI     8
 #define PIN_NUM_CLK      6
 #define PIN_NUM_CS       9
+#define PIN_INT          10
+
+#define ESP_INTR_FLAG_DEFAULT 0
+
+static char *TAG = "main";
 
 static spi_bus_config_t busConfig = {
     .miso_io_num = PIN_NUM_MISO,
@@ -18,37 +24,34 @@ static spi_bus_config_t busConfig = {
     .sclk_io_num = PIN_NUM_CLK,
     .quadwp_io_num = -1,
     .quadhd_io_num = -1,
-    .max_transfer_sz = 8,
-};
-
-static spi_device_interface_config_t SPIInterfaceConfig = {
-    .address_bits = 8,
-    .clock_speed_hz = CONFIG_IMU_CONTROLLER_SPI_BUS_FREQ,
-    .mode = 0,
-    .spics_io_num = PIN_NUM_CS,
-    .queue_size = 1,
 };
 
 void app_main(void)
 {
-    IMUData_t data;
+    uint8_t imuIndex;
+    IMUFIFOData_t *data;
     spi_bus_initialize(SPI2_HOST, &busConfig, SPI_DMA_CH_AUTO);
-    IMUControllerConfigSetSPI(0, SPI2_HOST, PIN_NUM_CS);
+
+    gpio_install_isr_service(ESP_INTR_FLAG_DEFAULT);
+
+    IMUControllerConfigSetSPI(0, SPI2_HOST, PIN_NUM_CS, PIN_INT);
     IMUControllerInit();
-    IMUSetConfigAccelRange(0, BMI2_ACC_RANGE_2G);
-    IMUSetConfigAccelODR(0, BMI2_ACC_ODR_200HZ);
-    IMUSetConfigAccelFilterBWP(0, BMI2_ACC_NORMAL_AVG4);
-    IMUSetConfigAccelFilterPerf(0, BMI2_PERF_OPT_MODE);
-    IMUSetConfigGyroRange(0, BMI2_GYR_RANGE_500);
-    IMUSetConfigGyroODR(0, BMI2_GYR_ODR_200HZ);
-    IMUSetConfigGyroFilterBWP(0, BMI2_GYR_NORMAL_MODE);
-    IMUSetConfigGyroFilterPerf(0, BMI2_PERF_OPT_MODE);
-    IMUUpdateIMUSettings(0);
-    IMUSetConfigIntPin(0, BMI2_DRDY_INT, BMI2_INT1);
-    IMUEnableIMU(0);
+    IMUControllerSetConfigAccelRange(0, BMI2_ACC_RANGE_2G);
+    IMUControllerSetConfigAccelODR(0, BMI2_ACC_ODR_50HZ);
+    IMUControllerSetConfigAccelFilterBWP(0, BMI2_ACC_NORMAL_AVG4);
+    IMUControllerSetConfigAccelFilterPerf(0, BMI2_PERF_OPT_MODE);
+    IMUControllerSetConfigGyroRange(0, BMI2_GYR_RANGE_500);
+    IMUControllerSetConfigGyroODR(0, BMI2_GYR_ODR_50HZ);
+    IMUControllerSetConfigGyroFilterBWP(0, BMI2_GYR_NORMAL_MODE);
+    IMUControllerSetConfigGyroFilterPerf(0, BMI2_PERF_OPT_MODE);
+    IMUControllerUpdateIMUSettings(0);
+    xTaskCreate(IMUControllerContinuousSamplingTask, "IMU FIFO task", 8192, NULL, 10, NULL);
+    IMUControllerStartContinuousSampling();
     while(1) {
-        IMUGetData(0, &data);
-        ESP_LOGI("MAIN", "Accel: %f %f %f Gyro: %f %f %f", data.accelX, data.accelY, data.accelZ, data.gyroX, data.gyroY, data.gyroZ);
+        IMUControllerWaitOnData(&imuIndex);
+        data = IMUControllerGetFIFODataPtr(imuIndex);
+        ESP_LOGI(TAG, "headTs: %lld, tailTs: %lld", data->headUsTimestamp, data->tailUsTimestamp);
+        ESP_LOGI(TAG, "First frame Accel x: %d, y:%d, z:%d", data->accelX[0], data->accelY[0], data->accelZ[0]);
         vTaskDelay(1000 / portTICK_PERIOD_MS);
     }
 

@@ -12,4 +12,10 @@ menu "IMU Controller"
         help
             The SPI bus speed for every IMU in Hz
 
+    config IMU_BUFFER_NUM_FRAMES
+        int "Number of buffer frames"
+        default 20
+        help
+            Number of accel/gyro data frames to buffer
+
 endmenu
