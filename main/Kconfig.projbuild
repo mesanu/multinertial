@@ -1,4 +1,4 @@
-menu "Network Controller"
+menu "Multinertial Main"
 
     config NETWORK_CONTROLLER_WIFI_SSID
         string "WiFi SSID"
@@ -18,5 +18,5 @@ menu "Network Controller"
         help
             Set the Maximum retry to avoid station reconnecting to the AP unlimited when the AP is really inexistent.
 
-
+    
 endmenu
