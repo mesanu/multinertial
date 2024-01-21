@@ -1,12 +1,16 @@
 #include <stdio.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "freertos/event_groups.h"
 #include "imu_controller_api.h"
-#include "network_controller_api.h"
 #include "driver/spi_master.h"
 #include "driver/gpio.h"
 #include "bmi270.h"
+
 #include "esp_log.h"
+
+#define WIFI_CONNECTED_BIT BIT0
+#define WIFI_FAIL_BIT      BIT1
 
 #define PIN_NUM_MISO     7
 #define PIN_NUM_MOSI     8

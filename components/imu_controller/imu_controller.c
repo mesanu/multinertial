@@ -25,8 +25,6 @@ static QueueHandle_t fifoReadyQueue;
 static EventGroupHandle_t fifoRecievedEventGroup;
 static EventBits_t eventGroupMask = 0;
 
-static void fifoReadyISRCallback(void *arg);
-
 static float lsbToMeas(int16_t val, float range, uint8_t bitWidth) {
     return (val * range) / (float)(1 << (bitWidth-1));
 }
