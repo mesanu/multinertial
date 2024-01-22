@@ -344,8 +344,12 @@ void IMUControllerContinuousSamplingTask(void *arg) {
 
             FIFOFrame.length = fifoLength + imu->dev.dummy_byte;
 
-            rslt = bmi2_read_fifo_data(&FIFOFrame, &imu->dev);
-            bmi2_error_codes_print_result(rslt);
+            if(FIFOFrame.length < IMU_FIFO_ALLOC_SIZE) {
+                rslt = bmi2_read_fifo_data(&FIFOFrame, &imu->dev);
+                bmi2_error_codes_print_result(rslt);
+            } else {
+                ESP_LOGE(TAG, "FIFO recieved larger than buffer IMU %d", imu->devIndex);
+            }
 
             /* Toss the first FIFO, since it has a few control
              * frames, accel only frames, etc, and is the wrong

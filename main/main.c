@@ -13,6 +13,11 @@
 #include "esp_log.h"
 #include "nvs_flash.h"
 
+#include "lwip/err.h"
+#include "lwip/sockets.h"
+#include "lwip/sys.h"
+#include <lwip/netdb.h>
+
 #include "sdkconfig.h"
 
 #define WIFI_CONNECTED_BIT BIT0
@@ -24,11 +29,17 @@
 #define PIN_NUM_CS       9
 #define PIN_INT          10
 
+#define PORT                        3333
+#define KEEPALIVE_IDLE              5
+#define KEEPALIVE_INTERVAL          5
+#define KEEPALIVE_COUNT             3
+
 #define ESP_INTR_FLAG_DEFAULT 0
 
 static char *TAG = "main";
 static uint8_t wifiRetryNum = 0;
 static EventGroupHandle_t wifiConnectEventGroup;
+static char sockRxBuffer[256];
 
 static wifi_config_t wifiConfig = {
     .sta = {
@@ -119,6 +130,15 @@ void app_main(void)
 {
     uint8_t imuIndex;
     IMUFIFOData_t *data;
+    int addrFamily = AF_INET;
+    int ipProtocol = 0;
+    int keepAlive = 1;
+    int keepIdle = KEEPALIVE_IDLE;
+    int keepInterval = KEEPALIVE_INTERVAL;
+    int keepCount = KEEPALIVE_COUNT;
+    int sockErr = 0;
+    int sockRecvLen = 0;
+    struct sockaddr_storage destAddr;
 
     //Initialize NVS
     esp_err_t ret = nvs_flash_init();
@@ -128,7 +148,7 @@ void app_main(void)
     }
     ESP_ERROR_CHECK(ret);
 
-    wifiInit();
+    //wifiInit();
 
     spi_bus_initialize(SPI2_HOST, &busConfig, SPI_DMA_CH_AUTO);
 
@@ -146,15 +166,62 @@ void app_main(void)
     IMUControllerSetConfigGyroFilterPerf(0, BMI2_PERF_OPT_MODE);
     IMUControllerUpdateIMUSettings(0);
     xTaskCreate(IMUControllerContinuousSamplingTask, "IMU FIFO task", 8192, NULL, 10, NULL);
+
+    /*struct sockaddr_in *destAddrIp4 = (struct sockaddr_in *)&destAddr;
+    destAddrIp4->sin_addr.s_addr = htonl(INADDR_ANY);
+    destAddrIp4->sin_family = AF_INET;
+    destAddrIp4->sin_port = htons(PORT);
+    ipProtocol = IPPROTO_IP;
+
+    int listenSock = socket(addrFamily, SOCK_STREAM, ipProtocol);
+    if (listenSock < 0) {
+        ESP_LOGE(TAG, "Unable to create socket: errno %d", errno);
+        vTaskDelete(NULL);
+        return;
+    }
+    int opt = 1;
+    setsockopt(listenSock, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
+    ESP_LOGI(TAG, "Socket created");
+
+    sockErr = bind(listenSock, (struct sockaddr *)&destAddr, sizeof(destAddr));
+    if (sockErr != 0) {
+        ESP_LOGE(TAG, "Socket unable to bind: errno %d", errno);
+        ESP_LOGE(TAG, "IPPROTO: %d", addrFamily);
+    }
+    ESP_LOGI(TAG, "Socket bound, port %d", PORT);
+
+    sockErr = listen(listenSock, 1);
+    if (sockErr != 0) {
+        ESP_LOGE(TAG, "Error occurred during listen: errno %d", errno);
+    }
+
+    struct sockaddr_storage sourceAddr; // Large enough for both IPv4 or IPv6
+    socklen_t addrLen = sizeof(sourceAddr);
+    int sock = accept(listenSock, (struct sockaddr *)&sourceAddr, &addrLen);
+    if (sock < 0) {
+        ESP_LOGE(TAG, "Unable to accept connection: errno %d", errno);
+    }
+
+    setsockopt(sock, SOL_SOCKET, SO_KEEPALIVE, &keepAlive, sizeof(int));
+    setsockopt(sock, IPPROTO_TCP, TCP_KEEPIDLE, &keepIdle, sizeof(int));
+    setsockopt(sock, IPPROTO_TCP, TCP_KEEPINTVL, &keepInterval, sizeof(int));
+    setsockopt(sock, IPPROTO_TCP, TCP_KEEPCNT, &keepCount, sizeof(int));
+    */
     IMUControllerStartContinuousSampling();
     while(1) {
+        /*
+        if(sockRxBuffer[0] != 's') {
+            sockRecvLen = recv(sock, sockRxBuffer, sizeof(sockRxBuffer) - 1, 0);
+        }
+        if(sockRxBuffer[0] == 'a') {
+            IMUControllerStartContinuousSampling();
+            sockRxBuffer[0] = 'd';
+        }*/
         IMUControllerWaitOnData(&imuIndex);
         data = IMUControllerGetFIFODataPtr(imuIndex);
         ESP_LOGI(TAG, "headTs: %lld, tailTs: %lld", data->headUsTimestamp, data->tailUsTimestamp);
         ESP_LOGI(TAG, "First frame Accel x: %d, y:%d, z:%d", data->accelX[0], data->accelY[0], data->accelZ[0]);
         vTaskDelay(1000 / portTICK_PERIOD_MS);
     }
-
-
 
 }
