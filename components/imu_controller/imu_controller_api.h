@@ -12,11 +12,11 @@
 /* Overhead in case we get some extra control
  * frames or data frames. Happens at init when
  * getting the first FIFO. Worst case scenario
- * seems to be an extra 50 bytes worth of frames */
-#define IMU_FIFO_OVERHEAD_BYTES 50
+ * seems to be an extra 100 bytes worth of frames */
+#define IMU_FIFO_OVERHEAD_BYTES 100
 
-/* Set the FIFO watermark level*/
-#define IMU_FIFO_WATERMARK_LEVEL CONFIG_IMU_BUFFER_NUM_FRAMES * IMU_FIFO_BYTES_PER_FRAME
+/* Set the FIFO watermark level. Add 1 for the dummy byte, that apperently ends up in the FIFO*/
+#define IMU_FIFO_WATERMARK_LEVEL CONFIG_IMU_BUFFER_NUM_FRAMES * IMU_FIFO_BYTES_PER_FRAME + 1
 
 /* Allocation size for FIFO array + a bit extra */
 #define IMU_FIFO_ALLOC_SIZE IMU_FIFO_WATERMARK_LEVEL + IMU_FIFO_OVERHEAD_BYTES
@@ -29,6 +29,8 @@ typedef enum {
     IMU_STATE_SPI_CONFIGURED,
     /* Chip ID read, registered on SPI bus */
     IMU_STATE_INITIALIZED,
+    /* IMU sampling is paused*/
+    IMU_STATE_SAMPLING_PAUSED,
     /* Started sampling with FIFO, havent gotten the first FIFO */
     IMU_STATE_SAMPLING_FIFO_INIT,
     /* Started sampling with FIFO, tossed first FIFO */
@@ -47,15 +49,17 @@ typedef struct {
     float gyroZ;
 } IMUOneShotData_t;
 
-typedef struct {
+typedef struct __attribute__ ((packed)) {
+    uint8_t devIndex;
     int64_t headUsTimestamp;
     int64_t tailUsTimestamp;
-    int16_t accelX[CONFIG_IMU_BUFFER_NUM_FRAMES];
-    int16_t accelY[CONFIG_IMU_BUFFER_NUM_FRAMES];
-    int16_t accelZ[CONFIG_IMU_BUFFER_NUM_FRAMES];
+    int16_t numFrames;
     int16_t gyroX[CONFIG_IMU_BUFFER_NUM_FRAMES];
     int16_t gyroY[CONFIG_IMU_BUFFER_NUM_FRAMES];
     int16_t gyroZ[CONFIG_IMU_BUFFER_NUM_FRAMES];
+    int16_t accelX[CONFIG_IMU_BUFFER_NUM_FRAMES];
+    int16_t accelY[CONFIG_IMU_BUFFER_NUM_FRAMES];
+    int16_t accelZ[CONFIG_IMU_BUFFER_NUM_FRAMES];
 } IMUFIFOData_t;
 
 typedef struct {
@@ -94,6 +98,8 @@ BaseType_t IMUControllerUpdateIMUSettings(uint8_t index);
 BaseType_t IMUControllerEnableIMU(uint8_t index);
 
 BaseType_t IMUControllerStartContinuousSampling(void);
+
+BaseType_t IMUControllerStopContinuousSampling(void);
 
 BaseType_t IMUControllerGetOneShotData(uint8_t index, IMUOneShotData_t *data);
 

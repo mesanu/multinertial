@@ -61,7 +61,7 @@ static void parseFIFOBuffer(IMUFIFOData_t *FIFOData, uint8_t *inputBuffer, uint1
                     FIFOData->accelZ[frameIndex] |= inputBuffer[++bufferIndex];
                     frameIndex++;
                 } else {
-                    return;
+                    break;
                 }
                 
                 break;
@@ -75,9 +75,10 @@ static void parseFIFOBuffer(IMUFIFOData_t *FIFOData, uint8_t *inputBuffer, uint1
                 bufferIndex += BMI2_FIFO_INPUT_CFG_LENGTH;
                 break;
             default:
-                return;
+                break;
         }
     }
+    FIFOData->numFrames = frameIndex;
 }
 
 static void fifoReadyISRCallback(void *arg) {
@@ -128,6 +129,7 @@ BaseType_t IMUControllerInit(void) {
         
             eventGroupMask |= (1 << i);
             internalConfigs[i].devIndex = i;
+            internalConfigs[i].FIFOData.devIndex = i;
             internalConfigs[i].devState = IMU_STATE_INITIALIZED;
         }
     }
@@ -147,6 +149,7 @@ BaseType_t IMUControllerConfigSetSPI(uint8_t index, spi_host_device_t spiHost, i
     internalConfigs[index].interfaceConfig.spiInterfaceConfig.mode = 0;
     internalConfigs[index].interfaceConfig.spiInterfaceConfig.spics_io_num = csPin;
     internalConfigs[index].interfaceConfig.spiInterfaceConfig.queue_size = 1;
+    internalConfigs[index].interfaceConfig.spiSemaphore = xSemaphoreCreateMutex();
 
     internalConfigs[index].accelConfig.type = BMI2_ACCEL;
     internalConfigs[index].gyroConfig.type = BMI2_GYRO;
@@ -261,11 +264,10 @@ BaseType_t IMUControllerEnableIMU(uint8_t index) {
 }
 
 BaseType_t IMUControllerStartContinuousSampling(void) {
-    uint8_t sensor_list[2] = {BMI2_ACCEL, BMI2_GYRO};
     int8_t rslt = BMI2_OK;
 
     for (int i = 0; i < CONFIG_IMU_CONTROLLER_MAX_SUPPORTED_UNITS; i++) {
-        if (internalConfigs[i].devState == IMU_STATE_INITIALIZED) {
+        if ((internalConfigs[i].devState == IMU_STATE_INITIALIZED) || (internalConfigs[i].devState == IMU_STATE_SAMPLING_PAUSED)) {
             ESP_LOGI(TAG, "Starting sampling on IMU %d", i);
             /* Get default configuration for hardware Interrupt */
             rslt = bmi2_get_int_pin_config(&pinConfig, &internalConfigs[i].dev);
@@ -332,6 +334,53 @@ BaseType_t IMUControllerStartContinuousSampling(void) {
     return pdFALSE;
 }
 
+BaseType_t IMUControllerStopContinuousSampling(void) {
+    int8_t rslt = BMI2_OK;
+    uint16_t fifoLength = 0;
+    int i;
+
+    for (i = 0; i < CONFIG_IMU_CONTROLLER_MAX_SUPPORTED_UNITS; i++) {
+        ESP_LOGI(TAG, "Stopping sampling on IMU %d", i);
+        if (internalConfigs[i].devState == IMU_STATE_SAMPLING_FIFO_INIT) {
+            gpio_intr_disable(internalConfigs[i].interruptGPIO);
+            internalConfigs[i].devState = IMU_STATE_SAMPLING_PAUSED;
+        }
+    }
+
+    for (i = 0; i < CONFIG_IMU_CONTROLLER_MAX_SUPPORTED_UNITS; i++) {
+        if (internalConfigs[i].devState == IMU_STATE_SAMPLING_PAUSED) {
+            if(xSemaphoreTake(internalConfigs[i].interfaceConfig.spiSemaphore, 1000/portTICK_PERIOD_MS) == pdFALSE) {
+                ESP_LOGE(TAG, "Failed to reserve spi semaphore in time IMU %d", i);
+                return pdFALSE;
+            }
+            xSemaphoreGive(internalConfigs[i].interfaceConfig.spiSemaphore);
+            rslt = bmi2_sensor_disable(&sensor_list, 2, &internalConfigs[i].dev);
+            if (rslt != BMI2_OK) {
+                bmi2_error_codes_print_result(rslt);
+                ESP_LOGE(TAG, "Failed to disable IMU %d", i);
+                return pdFALSE;
+            }
+            rslt = bmi2_get_fifo_length(&fifoLength, &internalConfigs[i].dev);
+            bmi2_error_codes_print_result(rslt);
+
+            if(FIFOFrame.length < IMU_FIFO_ALLOC_SIZE) {
+                rslt = bmi2_read_fifo_data(&FIFOFrame, &internalConfigs[i].dev);
+                bmi2_error_codes_print_result(rslt);
+            } else {
+                ESP_LOGE(TAG, "FIFO too larget to clear IMU %d", internalConfigs[i].devIndex);
+                return pdFALSE;
+            }
+
+            rslt = bmi2_get_fifo_length(&fifoLength, &internalConfigs[i].dev);
+            bmi2_error_codes_print_result(rslt);
+            if(fifoLength != 0) {
+                ESP_LOGE(TAG, "Couldn't clear FIFO leftovers IMU %d", internalConfigs[i].devIndex);
+                return pdFALSE;
+            }
+        }
+    }
+    return pdTRUE;
+}
 void IMUControllerContinuousSamplingTask(void *arg) {
     int8_t rslt = BMI2_OK;
     uint16_t fifoLength = 0;
@@ -360,10 +409,12 @@ void IMUControllerContinuousSamplingTask(void *arg) {
                 imu->FIFOData.headUsTimestamp = esp_timer_get_time();
                 continue;
             }
-            parseFIFOBuffer(&imu->FIFOData, FIFOBuffer, fifoLength);
+            parseFIFOBuffer(&imu->FIFOData, FIFOBuffer, FIFOFrame.length);
 
-            xEventGroupSetBits(fifoRecievedEventGroup, (1 << imu->devIndex));
-            gpio_intr_enable(imu->interruptGPIO);
+            if((imu->devState != IMU_STATE_SAMPLING_PAUSED)) {
+                xEventGroupSetBits(fifoRecievedEventGroup, (1 << imu->devIndex));
+                gpio_intr_enable(imu->interruptGPIO);
+            }
         }
     }
     

@@ -20,6 +20,8 @@
 
 #include "sdkconfig.h"
 
+#define MAIN_RX_BUFFER_LEN 6
+
 #define WIFI_CONNECTED_BIT BIT0
 #define WIFI_FAIL_BIT      BIT1
 
@@ -36,10 +38,23 @@
 
 #define ESP_INTR_FLAG_DEFAULT 0
 
-static char *TAG = "main";
+typedef enum {
+    MAIN_COMMAND_START,
+    MAIN_COMMAND_STOP,
+    MAIN_COMMAND_ACK,
+    MAIN_COMMAND_INVALID
+} MainCommand_t;
+
+static const char *TAG = "main";
+static const char *START_COMMAND_STR = "start";
+static const char *STOP_COMMAND_STR =  "stop-";
+static const char *ACK_COMMAND_STR =   "ack--";
+
 static uint8_t wifiRetryNum = 0;
 static EventGroupHandle_t wifiConnectEventGroup;
-static char sockRxBuffer[256];
+
+static char sockRxCommandBuffer[MAIN_RX_BUFFER_LEN] = {0};
+
 
 static wifi_config_t wifiConfig = {
     .sta = {
@@ -80,7 +95,7 @@ static void wifiConnectEventHandler(void* arg, esp_event_base_t eventBase,
     }
 }
 
-static void wifiInit(void) {
+static BaseType_t wifiInit(void) {
     wifiConnectEventGroup = xEventGroupCreate();
     ESP_ERROR_CHECK(esp_netif_init());
     ESP_ERROR_CHECK(esp_event_loop_create_default());
@@ -118,18 +133,18 @@ static void wifiInit(void) {
     if (bits & WIFI_CONNECTED_BIT) {
         ESP_LOGI(TAG, "connected to ap SSID:%s password:%s",
                  CONFIG_NETWORK_CONTROLLER_WIFI_SSID, CONFIG_NETWORK_CONTROLLER_WIFI_PASSWORD);
+        return pdTRUE;
     } else if (bits & WIFI_FAIL_BIT) {
         ESP_LOGI(TAG, "Failed to connect to SSID:%s, password:%s",
                  CONFIG_NETWORK_CONTROLLER_WIFI_SSID, CONFIG_NETWORK_CONTROLLER_WIFI_PASSWORD);
+        return pdFALSE;
     } else {
         ESP_LOGE(TAG, "UNEXPECTED EVENT");
+        return pdFALSE;
     }
 }
 
-void app_main(void)
-{
-    uint8_t imuIndex;
-    IMUFIFOData_t *data;
+static void socketCreate(int *sock) {
     int addrFamily = AF_INET;
     int ipProtocol = 0;
     int keepAlive = 1;
@@ -137,37 +152,9 @@ void app_main(void)
     int keepInterval = KEEPALIVE_INTERVAL;
     int keepCount = KEEPALIVE_COUNT;
     int sockErr = 0;
-    int sockRecvLen = 0;
     struct sockaddr_storage destAddr;
 
-    //Initialize NVS
-    esp_err_t ret = nvs_flash_init();
-    if (ret == ESP_ERR_NVS_NO_FREE_PAGES || ret == ESP_ERR_NVS_NEW_VERSION_FOUND) {
-      ESP_ERROR_CHECK(nvs_flash_erase());
-      ret = nvs_flash_init();
-    }
-    ESP_ERROR_CHECK(ret);
-
-    //wifiInit();
-
-    spi_bus_initialize(SPI2_HOST, &busConfig, SPI_DMA_CH_AUTO);
-
-    gpio_install_isr_service(ESP_INTR_FLAG_DEFAULT);
-
-    IMUControllerConfigSetSPI(0, SPI2_HOST, PIN_NUM_CS, PIN_INT);
-    IMUControllerInit();
-    IMUControllerSetConfigAccelRange(0, BMI2_ACC_RANGE_2G);
-    IMUControllerSetConfigAccelODR(0, BMI2_ACC_ODR_50HZ);
-    IMUControllerSetConfigAccelFilterBWP(0, BMI2_ACC_NORMAL_AVG4);
-    IMUControllerSetConfigAccelFilterPerf(0, BMI2_PERF_OPT_MODE);
-    IMUControllerSetConfigGyroRange(0, BMI2_GYR_RANGE_500);
-    IMUControllerSetConfigGyroODR(0, BMI2_GYR_ODR_50HZ);
-    IMUControllerSetConfigGyroFilterBWP(0, BMI2_GYR_NORMAL_MODE);
-    IMUControllerSetConfigGyroFilterPerf(0, BMI2_PERF_OPT_MODE);
-    IMUControllerUpdateIMUSettings(0);
-    xTaskCreate(IMUControllerContinuousSamplingTask, "IMU FIFO task", 8192, NULL, 10, NULL);
-
-    /*struct sockaddr_in *destAddrIp4 = (struct sockaddr_in *)&destAddr;
+    struct sockaddr_in *destAddrIp4 = (struct sockaddr_in *)&destAddr;
     destAddrIp4->sin_addr.s_addr = htonl(INADDR_ANY);
     destAddrIp4->sin_family = AF_INET;
     destAddrIp4->sin_port = htons(PORT);
@@ -197,31 +184,94 @@ void app_main(void)
 
     struct sockaddr_storage sourceAddr; // Large enough for both IPv4 or IPv6
     socklen_t addrLen = sizeof(sourceAddr);
-    int sock = accept(listenSock, (struct sockaddr *)&sourceAddr, &addrLen);
-    if (sock < 0) {
+    *sock = accept(listenSock, (struct sockaddr *)&sourceAddr, &addrLen);
+    if (*sock < 0) {
         ESP_LOGE(TAG, "Unable to accept connection: errno %d", errno);
+    } else {
+        ESP_LOGI(TAG, "Accepted connection");
     }
 
-    setsockopt(sock, SOL_SOCKET, SO_KEEPALIVE, &keepAlive, sizeof(int));
-    setsockopt(sock, IPPROTO_TCP, TCP_KEEPIDLE, &keepIdle, sizeof(int));
-    setsockopt(sock, IPPROTO_TCP, TCP_KEEPINTVL, &keepInterval, sizeof(int));
-    setsockopt(sock, IPPROTO_TCP, TCP_KEEPCNT, &keepCount, sizeof(int));
-    */
-    IMUControllerStartContinuousSampling();
-    while(1) {
-        /*
-        if(sockRxBuffer[0] != 's') {
-            sockRecvLen = recv(sock, sockRxBuffer, sizeof(sockRxBuffer) - 1, 0);
+    setsockopt(*sock, SOL_SOCKET, SO_KEEPALIVE, &keepAlive, sizeof(int));
+    setsockopt(*sock, IPPROTO_TCP, TCP_KEEPIDLE, &keepIdle, sizeof(int));
+    setsockopt(*sock, IPPROTO_TCP, TCP_KEEPINTVL, &keepInterval, sizeof(int));
+    setsockopt(*sock, IPPROTO_TCP, TCP_KEEPCNT, &keepCount, sizeof(int));
+}
+
+static MainCommand_t getCommand(int sock) {
+    if(sock > -1){
+        recv(sock, sockRxCommandBuffer, MAIN_RX_BUFFER_LEN - 1, 0);
+        if(strcmp(sockRxCommandBuffer, START_COMMAND_STR) == 0) {
+            return MAIN_COMMAND_START;
+        } else if(strcmp(sockRxCommandBuffer, STOP_COMMAND_STR) == 0) {
+            return MAIN_COMMAND_STOP;
+        } else if(strcmp(sockRxCommandBuffer, ACK_COMMAND_STR) == 0) {
+            return MAIN_COMMAND_ACK;
+        } else {
+            sockRxCommandBuffer[MAIN_RX_BUFFER_LEN -1] = 0;
+            ESP_LOGE(TAG, "Recieved invalid command %s", sockRxCommandBuffer);
+            return MAIN_COMMAND_INVALID;
         }
-        if(sockRxBuffer[0] == 'a') {
-            IMUControllerStartContinuousSampling();
-            sockRxBuffer[0] = 'd';
-        }*/
-        IMUControllerWaitOnData(&imuIndex);
-        data = IMUControllerGetFIFODataPtr(imuIndex);
-        ESP_LOGI(TAG, "headTs: %lld, tailTs: %lld", data->headUsTimestamp, data->tailUsTimestamp);
-        ESP_LOGI(TAG, "First frame Accel x: %d, y:%d, z:%d", data->accelX[0], data->accelY[0], data->accelZ[0]);
-        vTaskDelay(1000 / portTICK_PERIOD_MS);
+    }
+    ESP_LOGE(TAG, "Invalid socket");
+    return MAIN_COMMAND_INVALID;
+}
+
+void app_main(void)
+{
+    uint8_t imuIndex;
+    IMUFIFOData_t *data;
+    int sock = -1;
+    BaseType_t sampling = pdFALSE;
+
+    //Initialize NVS
+    esp_err_t ret = nvs_flash_init();
+    if (ret == ESP_ERR_NVS_NO_FREE_PAGES || ret == ESP_ERR_NVS_NEW_VERSION_FOUND) {
+      ESP_ERROR_CHECK(nvs_flash_erase());
+      ret = nvs_flash_init();
+    }
+    ESP_ERROR_CHECK(ret);
+
+    BaseType_t wifiConnected = wifiInit();
+
+    spi_bus_initialize(SPI2_HOST, &busConfig, SPI_DMA_CH_AUTO);
+
+    gpio_install_isr_service(ESP_INTR_FLAG_DEFAULT);
+
+    IMUControllerConfigSetSPI(0, SPI2_HOST, PIN_NUM_CS, PIN_INT);
+    IMUControllerInit();
+    IMUControllerSetConfigAccelRange(0, BMI2_ACC_RANGE_2G);
+    IMUControllerSetConfigAccelODR(0, BMI2_ACC_ODR_400HZ);
+    IMUControllerSetConfigAccelFilterBWP(0, BMI2_ACC_NORMAL_AVG4);
+    IMUControllerSetConfigAccelFilterPerf(0, BMI2_PERF_OPT_MODE);
+    IMUControllerSetConfigGyroRange(0, BMI2_GYR_RANGE_500);
+    IMUControllerSetConfigGyroODR(0, BMI2_GYR_ODR_400HZ);
+    IMUControllerSetConfigGyroFilterBWP(0, BMI2_GYR_NORMAL_MODE);
+    IMUControllerSetConfigGyroFilterPerf(0, BMI2_PERF_OPT_MODE);
+    IMUControllerUpdateIMUSettings(0);
+    xTaskCreate(IMUControllerContinuousSamplingTask, "IMU FIFO task", 8192, NULL, 10, NULL);
+
+    if(wifiConnected){
+        socketCreate(&sock);
     }
 
+    while(1) {
+        if(sampling == pdFALSE) {
+            if(getCommand(sock) == MAIN_COMMAND_START) {
+                IMUControllerStartContinuousSampling();
+                sampling = pdTRUE;
+                IMUControllerWaitOnData(&imuIndex);
+                data = IMUControllerGetFIFODataPtr(imuIndex);
+                send(sock, data, sizeof(IMUFIFOData_t), 0);
+            }
+        } else if (sampling == pdTRUE) {
+            if(getCommand(sock) == MAIN_COMMAND_STOP) {
+                IMUControllerStopContinuousSampling();
+                sampling = pdFALSE;
+            } else {
+                IMUControllerWaitOnData(&imuIndex);
+                data = IMUControllerGetFIFODataPtr(imuIndex);
+                send(sock, data, sizeof(IMUFIFOData_t), 0);
+            }
+        }
+    }
 }
