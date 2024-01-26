@@ -39,6 +39,7 @@
 #define ESP_INTR_FLAG_DEFAULT 0
 
 typedef enum {
+    MAIN_COMMAND_NONE,
     MAIN_COMMAND_START,
     MAIN_COMMAND_STOP,
     MAIN_COMMAND_ACK,
@@ -198,22 +199,24 @@ static void socketCreate(int *sock) {
 }
 
 static MainCommand_t getCommand(int sock) {
+    MainCommand_t command = MAIN_COMMAND_NONE;
     if(sock > -1){
         recv(sock, sockRxCommandBuffer, MAIN_RX_BUFFER_LEN - 1, 0);
         if(strcmp(sockRxCommandBuffer, START_COMMAND_STR) == 0) {
-            return MAIN_COMMAND_START;
+            command = MAIN_COMMAND_START;
         } else if(strcmp(sockRxCommandBuffer, STOP_COMMAND_STR) == 0) {
-            return MAIN_COMMAND_STOP;
+            command = MAIN_COMMAND_STOP;
         } else if(strcmp(sockRxCommandBuffer, ACK_COMMAND_STR) == 0) {
-            return MAIN_COMMAND_ACK;
+            command = MAIN_COMMAND_ACK;
         } else {
-            sockRxCommandBuffer[MAIN_RX_BUFFER_LEN -1] = 0;
             ESP_LOGE(TAG, "Recieved invalid command %s", sockRxCommandBuffer);
-            return MAIN_COMMAND_INVALID;
+            command = MAIN_COMMAND_INVALID;
         }
+    } else {
+        ESP_LOGE(TAG, "Invalid socket");
     }
-    ESP_LOGE(TAG, "Invalid socket");
-    return MAIN_COMMAND_INVALID;
+    sockRxCommandBuffer[0] = 0;
+    return command;
 }
 
 void app_main(void)
@@ -222,6 +225,7 @@ void app_main(void)
     IMUFIFOData_t *data;
     int sock = -1;
     BaseType_t sampling = pdFALSE;
+    MainCommand_t command = MAIN_COMMAND_NONE;
 
     //Initialize NVS
     esp_err_t ret = nvs_flash_init();
@@ -247,6 +251,7 @@ void app_main(void)
     IMUControllerSetConfigGyroODR(0, BMI2_GYR_ODR_400HZ);
     IMUControllerSetConfigGyroFilterBWP(0, BMI2_GYR_NORMAL_MODE);
     IMUControllerSetConfigGyroFilterPerf(0, BMI2_PERF_OPT_MODE);
+    IMUControllerSetConfigGyroNoisePerf(0, BMI2_PERF_OPT_MODE);
     IMUControllerUpdateIMUSettings(0);
     xTaskCreate(IMUControllerContinuousSamplingTask, "IMU FIFO task", 8192, NULL, 10, NULL);
 
@@ -255,16 +260,19 @@ void app_main(void)
     }
 
     while(1) {
+        command = getCommand(sock);
         if(sampling == pdFALSE) {
-            if(getCommand(sock) == MAIN_COMMAND_START) {
+            if(command == MAIN_COMMAND_START) {
                 IMUControllerStartContinuousSampling();
                 sampling = pdTRUE;
                 IMUControllerWaitOnData(&imuIndex);
                 data = IMUControllerGetFIFODataPtr(imuIndex);
                 send(sock, data, sizeof(IMUFIFOData_t), 0);
+            } else {
+                vTaskDelay(1);
             }
         } else if (sampling == pdTRUE) {
-            if(getCommand(sock) == MAIN_COMMAND_STOP) {
+            if(command == MAIN_COMMAND_STOP) {
                 IMUControllerStopContinuousSampling();
                 sampling = pdFALSE;
             } else {

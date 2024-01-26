@@ -222,7 +222,15 @@ BaseType_t IMUControllerSetConfigGyroFilterBWP(uint8_t index, uint8_t bwp) {
 
 BaseType_t IMUControllerSetConfigGyroFilterPerf(uint8_t index, uint8_t filterPerf) {
     if (internalConfigs[index].devState == IMU_STATE_INITIALIZED) {
-        internalConfigs[index].gyroConfig.cfg.gyr.bwp = filterPerf;
+        internalConfigs[index].gyroConfig.cfg.gyr.filter_perf = filterPerf;
+        return pdTRUE;
+    }
+    return pdFALSE;
+}
+
+BaseType_t IMUControllerSetConfigGyroNoisePerf(uint8_t index, uint8_t noisePerf) {
+    if (internalConfigs[index].devState == IMU_STATE_INITIALIZED) {
+        internalConfigs[index].gyroConfig.cfg.gyr.noise_perf = noisePerf;
         return pdTRUE;
     }
     return pdFALSE;
@@ -341,9 +349,11 @@ BaseType_t IMUControllerStopContinuousSampling(void) {
 
     for (i = 0; i < CONFIG_IMU_CONTROLLER_MAX_SUPPORTED_UNITS; i++) {
         ESP_LOGI(TAG, "Stopping sampling on IMU %d", i);
-        if (internalConfigs[i].devState == IMU_STATE_SAMPLING_FIFO_INIT) {
-            gpio_intr_disable(internalConfigs[i].interruptGPIO);
+        if ((internalConfigs[i].devState == IMU_STATE_SAMPLING_FIFO_INIT) || (internalConfigs[i].devState == IMU_STATE_SAMPLING_FIFO_RUNNING)) {
             internalConfigs[i].devState = IMU_STATE_SAMPLING_PAUSED;
+            ESP_LOGI(TAG, "Disabling interrupt IMU %d", i);
+            gpio_intr_disable(internalConfigs[i].interruptGPIO);
+            ESP_LOGI(TAG, "Interrupt disabled %d", i);
         }
     }
 
@@ -353,6 +363,7 @@ BaseType_t IMUControllerStopContinuousSampling(void) {
                 ESP_LOGE(TAG, "Failed to reserve spi semaphore in time IMU %d", i);
                 return pdFALSE;
             }
+            ESP_LOGI(TAG, "SPI semaphore acquired %d", i);
             xSemaphoreGive(internalConfigs[i].interfaceConfig.spiSemaphore);
             rslt = bmi2_sensor_disable(&sensor_list, 2, &internalConfigs[i].dev);
             if (rslt != BMI2_OK) {
@@ -377,6 +388,7 @@ BaseType_t IMUControllerStopContinuousSampling(void) {
                 ESP_LOGE(TAG, "Couldn't clear FIFO leftovers IMU %d", internalConfigs[i].devIndex);
                 return pdFALSE;
             }
+            ESP_LOGI(TAG, "FIFO dumped %d", i);
         }
     }
     return pdTRUE;
@@ -415,6 +427,8 @@ void IMUControllerContinuousSamplingTask(void *arg) {
                 xEventGroupSetBits(fifoRecievedEventGroup, (1 << imu->devIndex));
                 gpio_intr_enable(imu->interruptGPIO);
             }
+        } else {
+            vTaskDelay(1);
         }
     }
     

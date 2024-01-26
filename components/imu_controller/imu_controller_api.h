@@ -93,6 +93,8 @@ BaseType_t IMUControllerSetConfigGyroFilterBWP(uint8_t index, uint8_t bwp);
 
 BaseType_t IMUControllerSetConfigGyroFilterPerf(uint8_t index, uint8_t filterPerf);
 
+BaseType_t IMUControllerSetConfigGyroNoisePerf(uint8_t index, uint8_t noisePerf);
+
 BaseType_t IMUControllerUpdateIMUSettings(uint8_t index);
 
 BaseType_t IMUControllerEnableIMU(uint8_t index);
