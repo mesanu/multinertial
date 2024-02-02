@@ -351,9 +351,7 @@ BaseType_t IMUControllerStopContinuousSampling(void) {
         ESP_LOGI(TAG, "Stopping sampling on IMU %d", i);
         if ((internalConfigs[i].devState == IMU_STATE_SAMPLING_FIFO_INIT) || (internalConfigs[i].devState == IMU_STATE_SAMPLING_FIFO_RUNNING)) {
             internalConfigs[i].devState = IMU_STATE_SAMPLING_PAUSED;
-            ESP_LOGI(TAG, "Disabling interrupt IMU %d", i);
             gpio_intr_disable(internalConfigs[i].interruptGPIO);
-            ESP_LOGI(TAG, "Interrupt disabled %d", i);
         }
     }
 
@@ -363,7 +361,6 @@ BaseType_t IMUControllerStopContinuousSampling(void) {
                 ESP_LOGE(TAG, "Failed to reserve spi semaphore in time IMU %d", i);
                 return pdFALSE;
             }
-            ESP_LOGI(TAG, "SPI semaphore acquired %d", i);
             xSemaphoreGive(internalConfigs[i].interfaceConfig.spiSemaphore);
             rslt = bmi2_sensor_disable(&sensor_list, 2, &internalConfigs[i].dev);
             if (rslt != BMI2_OK) {
@@ -388,7 +385,6 @@ BaseType_t IMUControllerStopContinuousSampling(void) {
                 ESP_LOGE(TAG, "Couldn't clear FIFO leftovers IMU %d", internalConfigs[i].devIndex);
                 return pdFALSE;
             }
-            ESP_LOGI(TAG, "FIFO dumped %d", i);
         }
     }
     return pdTRUE;

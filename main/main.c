@@ -18,6 +18,8 @@
 #include "lwip/sys.h"
 #include <lwip/netdb.h>
 
+#include "led_strip.h"
+
 #include "sdkconfig.h"
 
 #define MAIN_RX_BUFFER_LEN 6
@@ -25,11 +27,13 @@
 #define WIFI_CONNECTED_BIT BIT0
 #define WIFI_FAIL_BIT      BIT1
 
-#define PIN_NUM_MISO     7
-#define PIN_NUM_MOSI     8
-#define PIN_NUM_CLK      6
-#define PIN_NUM_CS       9
+#define PIN_NUM_MISO     5
+#define PIN_NUM_MOSI     6
+#define PIN_NUM_CLK      4
+#define PIN_NUM_CS       7
 #define PIN_INT          10
+
+#define PIN_CAL_BUTTON 2
 
 #define PORT                        3333
 #define KEEPALIVE_IDLE              5
@@ -43,13 +47,15 @@ typedef enum {
     MAIN_COMMAND_START,
     MAIN_COMMAND_STOP,
     MAIN_COMMAND_ACK,
+    MAIN_COMMAND_CAL_TOGGLE,
     MAIN_COMMAND_INVALID
 } MainCommand_t;
 
 static const char *TAG = "main";
-static const char *START_COMMAND_STR = "start";
-static const char *STOP_COMMAND_STR =  "stop-";
-static const char *ACK_COMMAND_STR =   "ack--";
+static const char *START_COMMAND_STR =    "start";
+static const char *STOP_COMMAND_STR =     "stop";
+static const char *ACK_COMMAND_STR =      "ack";
+static const char *CAL_MODE_COMMAND_STR = "cal";
 
 static uint8_t wifiRetryNum = 0;
 static EventGroupHandle_t wifiConnectEventGroup;
@@ -67,13 +73,32 @@ static wifi_config_t wifiConfig = {
     },
 };
 
-static spi_bus_config_t busConfig = {
+static const spi_bus_config_t busConfig = {
     .miso_io_num = PIN_NUM_MISO,
     .mosi_io_num = PIN_NUM_MOSI,
     .sclk_io_num = PIN_NUM_CLK,
     .quadwp_io_num = -1,
     .quadhd_io_num = -1,
 };
+
+static const gpio_config_t calButtonPinConf = {
+    .intr_type = GPIO_INTR_DISABLE,
+    .mode = GPIO_MODE_INPUT,
+    .pin_bit_mask = (1ULL << PIN_CAL_BUTTON),
+    .pull_down_en = 0,
+    .pull_up_en = 1,
+};
+
+static const led_strip_config_t stripConfig = {
+    .strip_gpio_num = 8,
+    .max_leds = 1, // at least one LED on board
+};
+
+static const led_strip_rmt_config_t rmtConfig = {
+    .resolution_hz = 10000000, // 10MHz
+};
+
+static led_strip_handle_t ledStrip;
 
 static void wifiConnectEventHandler(void* arg, esp_event_base_t eventBase,
                                 int32_t eventId, void* eventData) {
@@ -202,21 +227,26 @@ static MainCommand_t getCommand(int sock) {
     MainCommand_t command = MAIN_COMMAND_NONE;
     if(sock > -1){
         recv(sock, sockRxCommandBuffer, MAIN_RX_BUFFER_LEN - 1, 0);
-        if(strcmp(sockRxCommandBuffer, START_COMMAND_STR) == 0) {
+        if(sockRxCommandBuffer[0] == 0) {
+            command = MAIN_COMMAND_NONE;
+        } else if(strcmp(sockRxCommandBuffer, START_COMMAND_STR) == 0) {
             command = MAIN_COMMAND_START;
         } else if(strcmp(sockRxCommandBuffer, STOP_COMMAND_STR) == 0) {
             command = MAIN_COMMAND_STOP;
         } else if(strcmp(sockRxCommandBuffer, ACK_COMMAND_STR) == 0) {
             command = MAIN_COMMAND_ACK;
+        } else if(strcmp(sockRxCommandBuffer, CAL_MODE_COMMAND_STR) == 0) {
+            command = MAIN_COMMAND_CAL_TOGGLE;
         } else {
             ESP_LOGE(TAG, "Recieved invalid command %s", sockRxCommandBuffer);
             command = MAIN_COMMAND_INVALID;
         }
+        sockRxCommandBuffer[0] = 0;
+        return command;
     } else {
         ESP_LOGE(TAG, "Invalid socket");
+        return MAIN_COMMAND_INVALID;
     }
-    sockRxCommandBuffer[0] = 0;
-    return command;
 }
 
 void app_main(void)
@@ -225,6 +255,7 @@ void app_main(void)
     IMUFIFOData_t *data;
     int sock = -1;
     BaseType_t sampling = pdFALSE;
+    BaseType_t calMode = pdFALSE;
     MainCommand_t command = MAIN_COMMAND_NONE;
 
     //Initialize NVS
@@ -234,6 +265,13 @@ void app_main(void)
       ret = nvs_flash_init();
     }
     ESP_ERROR_CHECK(ret);
+
+    //Set the cal button pin config
+    gpio_config(&calButtonPinConf);
+
+    ESP_ERROR_CHECK(led_strip_new_rmt_device(&stripConfig, &rmtConfig, &ledStrip));
+    /* Set all LED off to clear all pixels */
+    led_strip_clear(ledStrip);
 
     BaseType_t wifiConnected = wifiInit();
 
@@ -263,11 +301,35 @@ void app_main(void)
         command = getCommand(sock);
         if(sampling == pdFALSE) {
             if(command == MAIN_COMMAND_START) {
+                if(calMode == pdTRUE) {
+                    while(gpio_get_level(PIN_CAL_BUTTON)) {
+                        vTaskDelay(1);
+                    }
+                    //Set LED to blue
+                    led_strip_set_pixel(ledStrip, 0, 0, 0, 8);
+                    led_strip_refresh(ledStrip);
+
+                    vTaskDelay(2000/portTICK_PERIOD_MS);
+
+                    //Set LED to green
+                    led_strip_set_pixel(ledStrip, 0, 0, 8, 0);
+                    led_strip_refresh(ledStrip);
+                }
                 IMUControllerStartContinuousSampling();
                 sampling = pdTRUE;
                 IMUControllerWaitOnData(&imuIndex);
                 data = IMUControllerGetFIFODataPtr(imuIndex);
                 send(sock, data, sizeof(IMUFIFOData_t), 0);
+            } else if (command == MAIN_COMMAND_CAL_TOGGLE) {
+                if(calMode == pdTRUE) {
+                    calMode = pdFALSE;
+                    led_strip_clear(ledStrip);
+                } else {
+                    calMode = pdTRUE;
+                    //Set LED to red
+                    led_strip_set_pixel(ledStrip, 0, 8, 0, 0);
+                    led_strip_refresh(ledStrip);
+                }
             } else {
                 vTaskDelay(1);
             }
@@ -275,6 +337,11 @@ void app_main(void)
             if(command == MAIN_COMMAND_STOP) {
                 IMUControllerStopContinuousSampling();
                 sampling = pdFALSE;
+                if(calMode == pdTRUE) {
+                    //Set LED to red
+                    led_strip_set_pixel(ledStrip, 0, 8, 0, 0);
+                    led_strip_refresh(ledStrip);
+                }
             } else {
                 IMUControllerWaitOnData(&imuIndex);
                 data = IMUControllerGetFIFODataPtr(imuIndex);
