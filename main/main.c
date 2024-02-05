@@ -30,8 +30,14 @@
 #define PIN_NUM_MISO     5
 #define PIN_NUM_MOSI     6
 #define PIN_NUM_CLK      4
-#define PIN_NUM_CS       7
-#define PIN_INT          10
+
+#define PIN_NUM_CS_0     7
+#define PIN_NUM_CS_1     9
+#define PIN_NUM_CS_2     0
+
+#define PIN_INT_0        10
+#define PIN_INT_1        3
+#define PIN_INT_2        1
 
 #define PIN_CAL_BUTTON 2
 
@@ -279,18 +285,22 @@ void app_main(void)
 
     gpio_install_isr_service(ESP_INTR_FLAG_DEFAULT);
 
-    IMUControllerConfigSetSPI(0, SPI2_HOST, PIN_NUM_CS, PIN_INT);
+    IMUControllerConfigSetSPI(0, SPI2_HOST, PIN_NUM_CS_0, PIN_INT_0);
+    IMUControllerConfigSetSPI(1, SPI2_HOST, PIN_NUM_CS_1, PIN_INT_1);
+    IMUControllerConfigSetSPI(2, SPI2_HOST, PIN_NUM_CS_2, PIN_INT_2);
     IMUControllerInit();
-    IMUControllerSetConfigAccelRange(0, BMI2_ACC_RANGE_2G);
-    IMUControllerSetConfigAccelODR(0, BMI2_ACC_ODR_400HZ);
-    IMUControllerSetConfigAccelFilterBWP(0, BMI2_ACC_NORMAL_AVG4);
-    IMUControllerSetConfigAccelFilterPerf(0, BMI2_PERF_OPT_MODE);
-    IMUControllerSetConfigGyroRange(0, BMI2_GYR_RANGE_500);
-    IMUControllerSetConfigGyroODR(0, BMI2_GYR_ODR_400HZ);
-    IMUControllerSetConfigGyroFilterBWP(0, BMI2_GYR_NORMAL_MODE);
-    IMUControllerSetConfigGyroFilterPerf(0, BMI2_PERF_OPT_MODE);
-    IMUControllerSetConfigGyroNoisePerf(0, BMI2_PERF_OPT_MODE);
+    IMUControllerSetConfigAccelRange(BMI2_ACC_RANGE_2G);
+    IMUControllerSetConfigAccelODR(BMI2_ACC_ODR_400HZ);
+    IMUControllerSetConfigAccelFilterBWP(BMI2_ACC_NORMAL_AVG4);
+    IMUControllerSetConfigAccelFilterPerf(BMI2_PERF_OPT_MODE);
+    IMUControllerSetConfigGyroRange(BMI2_GYR_RANGE_500);
+    IMUControllerSetConfigGyroODR(BMI2_GYR_ODR_400HZ);
+    IMUControllerSetConfigGyroFilterBWP(BMI2_GYR_NORMAL_MODE);
+    IMUControllerSetConfigGyroFilterPerf(BMI2_PERF_OPT_MODE);
+    IMUControllerSetConfigGyroNoisePerf(BMI2_PERF_OPT_MODE);
     IMUControllerUpdateIMUSettings(0);
+    IMUControllerUpdateIMUSettings(1);
+    IMUControllerUpdateIMUSettings(2);
     xTaskCreate(IMUControllerContinuousSamplingTask, "IMU FIFO task", 8192, NULL, 10, NULL);
 
     if(wifiConnected){

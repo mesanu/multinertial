@@ -164,74 +164,92 @@ BaseType_t IMUControllerConfigSetSPI(uint8_t index, spi_host_device_t spiHost, i
     return pdTRUE;
 }
 
-BaseType_t IMUControllerSetConfigAccelRange(uint8_t index, uint8_t range) {
-    if (internalConfigs[index].devState == IMU_STATE_INITIALIZED) {
-        internalConfigs[index].accelConfig.cfg.acc.range = range;
-        return pdTRUE;
+BaseType_t IMUControllerSetConfigAccelRange(uint8_t range) {
+    for (int i = 0; i < CONFIG_IMU_CONTROLLER_MAX_SUPPORTED_UNITS; i++) {
+        if (internalConfigs[i].devState == IMU_STATE_INITIALIZED) {
+            internalConfigs[i].accelConfig.cfg.acc.range = range;
+            return pdTRUE;
+        }
     }
     return pdFALSE;
 }
 
-BaseType_t IMUControllerSetConfigAccelODR(uint8_t index, uint8_t odr) {
-    if (internalConfigs[index].devState == IMU_STATE_INITIALIZED) {
-        internalConfigs[index].accelConfig.cfg.acc.odr = odr;
-        return pdTRUE;
+BaseType_t IMUControllerSetConfigAccelODR(uint8_t odr) {
+    for (int i = 0; i < CONFIG_IMU_CONTROLLER_MAX_SUPPORTED_UNITS; i++) {
+        if (internalConfigs[i].devState == IMU_STATE_INITIALIZED) {
+            internalConfigs[i].accelConfig.cfg.acc.odr = odr;
+            return pdTRUE;
+        }
     }
     return pdFALSE;
 }
 
-BaseType_t IMUControllerSetConfigAccelFilterBWP(uint8_t index, uint8_t bwp) {
-    if (internalConfigs[index].devState == IMU_STATE_INITIALIZED) {
-        internalConfigs[index].accelConfig.cfg.acc.bwp = bwp;
-        return pdTRUE;
+BaseType_t IMUControllerSetConfigAccelFilterBWP(uint8_t bwp) {
+    for (int i = 0; i < CONFIG_IMU_CONTROLLER_MAX_SUPPORTED_UNITS; i++) {
+        if (internalConfigs[i].devState == IMU_STATE_INITIALIZED) {
+            internalConfigs[i].accelConfig.cfg.acc.bwp = bwp;
+            return pdTRUE;
+        }
     }
     return pdFALSE;
 }
 
-BaseType_t IMUControllerSetConfigAccelFilterPerf(uint8_t index, uint8_t filterPerf) {
-    if (internalConfigs[index].devState == IMU_STATE_INITIALIZED) {
-        internalConfigs[index].accelConfig.cfg.acc.bwp = filterPerf;
-        return pdTRUE;
+BaseType_t IMUControllerSetConfigAccelFilterPerf(uint8_t filterPerf) {
+    for (int i = 0; i < CONFIG_IMU_CONTROLLER_MAX_SUPPORTED_UNITS; i++) {
+        if (internalConfigs[i].devState == IMU_STATE_INITIALIZED) {
+            internalConfigs[i].accelConfig.cfg.acc.bwp = filterPerf;
+            return pdTRUE;
+        }
     }
     return pdFALSE;
 }
 
-BaseType_t IMUControllerSetConfigGyroRange(uint8_t index, uint8_t range) {
-    if (internalConfigs[index].devState == IMU_STATE_INITIALIZED) {
-        internalConfigs[index].gyroConfig.cfg.gyr.range = range;
-        return pdTRUE;
+BaseType_t IMUControllerSetConfigGyroRange(uint8_t range) {
+    for (int i = 0; i < CONFIG_IMU_CONTROLLER_MAX_SUPPORTED_UNITS; i++) {
+        if (internalConfigs[i].devState == IMU_STATE_INITIALIZED) {
+            internalConfigs[i].gyroConfig.cfg.gyr.range = range;
+            return pdTRUE;
+        }
     }
     return pdFALSE;
 }
 
-BaseType_t IMUControllerSetConfigGyroODR(uint8_t index, uint8_t odr) {
-    if (internalConfigs[index].devState == IMU_STATE_INITIALIZED) {
-        internalConfigs[index].gyroConfig.cfg.gyr.odr = odr;
-        return pdTRUE;
+BaseType_t IMUControllerSetConfigGyroODR(uint8_t odr) {
+    for (int i = 0; i < CONFIG_IMU_CONTROLLER_MAX_SUPPORTED_UNITS; i++) {
+        if (internalConfigs[i].devState == IMU_STATE_INITIALIZED) {
+            internalConfigs[i].gyroConfig.cfg.gyr.odr = odr;
+            return pdTRUE;
+        }
     }
     return pdFALSE;
 }
 
-BaseType_t IMUControllerSetConfigGyroFilterBWP(uint8_t index, uint8_t bwp) {
-    if (internalConfigs[index].devState == IMU_STATE_INITIALIZED) {
-        internalConfigs[index].gyroConfig.cfg.gyr.bwp = bwp;
-        return pdTRUE;
+BaseType_t IMUControllerSetConfigGyroFilterBWP(uint8_t bwp) {
+    for (int i = 0; i < CONFIG_IMU_CONTROLLER_MAX_SUPPORTED_UNITS; i++) {
+        if (internalConfigs[i].devState == IMU_STATE_INITIALIZED) {
+            internalConfigs[i].gyroConfig.cfg.gyr.bwp = bwp;
+            return pdTRUE;
+        }
     }
     return pdFALSE;
 }
 
-BaseType_t IMUControllerSetConfigGyroFilterPerf(uint8_t index, uint8_t filterPerf) {
-    if (internalConfigs[index].devState == IMU_STATE_INITIALIZED) {
-        internalConfigs[index].gyroConfig.cfg.gyr.filter_perf = filterPerf;
-        return pdTRUE;
+BaseType_t IMUControllerSetConfigGyroFilterPerf(uint8_t filterPerf) {
+    for (int i = 0; i < CONFIG_IMU_CONTROLLER_MAX_SUPPORTED_UNITS; i++) {
+        if (internalConfigs[i].devState == IMU_STATE_INITIALIZED) {
+            internalConfigs[i].gyroConfig.cfg.gyr.filter_perf = filterPerf;
+            return pdTRUE;
+        }
     }
     return pdFALSE;
 }
 
-BaseType_t IMUControllerSetConfigGyroNoisePerf(uint8_t index, uint8_t noisePerf) {
-    if (internalConfigs[index].devState == IMU_STATE_INITIALIZED) {
-        internalConfigs[index].gyroConfig.cfg.gyr.noise_perf = noisePerf;
-        return pdTRUE;
+BaseType_t IMUControllerSetConfigGyroNoisePerf(uint8_t noisePerf) {
+    for (int i = 0; i < CONFIG_IMU_CONTROLLER_MAX_SUPPORTED_UNITS; i++) {
+        if (internalConfigs[i].devState == IMU_STATE_INITIALIZED) {
+            internalConfigs[i].gyroConfig.cfg.gyr.noise_perf = noisePerf;
+            return pdTRUE;
+        }
     }
     return pdFALSE;
 }

@@ -77,23 +77,23 @@ BaseType_t IMUControllerInit(void);
 
 BaseType_t IMUControllerConfigSetSPI(uint8_t index, spi_host_device_t spiHost, int csPin, int interruptGPIO);
 
-BaseType_t IMUControllerSetConfigAccelRange(uint8_t index, uint8_t range);
+BaseType_t IMUControllerSetConfigAccelRange(uint8_t range);
 
-BaseType_t IMUControllerSetConfigAccelODR(uint8_t index, uint8_t odr);
+BaseType_t IMUControllerSetConfigAccelODR(uint8_t odr);
 
-BaseType_t IMUControllerSetConfigAccelFilterBWP(uint8_t index, uint8_t bwp);
+BaseType_t IMUControllerSetConfigAccelFilterBWP(uint8_t bwp);
 
-BaseType_t IMUControllerSetConfigAccelFilterPerf(uint8_t index, uint8_t filterPerf);
+BaseType_t IMUControllerSetConfigAccelFilterPerf(uint8_t filterPerf);
 
-BaseType_t IMUControllerSetConfigGyroRange(uint8_t index, uint8_t range);
+BaseType_t IMUControllerSetConfigGyroRange(uint8_t range);
 
-BaseType_t IMUControllerSetConfigGyroODR(uint8_t index, uint8_t odr);
+BaseType_t IMUControllerSetConfigGyroODR(uint8_t odr);
 
-BaseType_t IMUControllerSetConfigGyroFilterBWP(uint8_t index, uint8_t bwp);
+BaseType_t IMUControllerSetConfigGyroFilterBWP(uint8_t bwp);
 
-BaseType_t IMUControllerSetConfigGyroFilterPerf(uint8_t index, uint8_t filterPerf);
+BaseType_t IMUControllerSetConfigGyroFilterPerf(uint8_t filterPerf);
 
-BaseType_t IMUControllerSetConfigGyroNoisePerf(uint8_t index, uint8_t noisePerf);
+BaseType_t IMUControllerSetConfigGyroNoisePerf(uint8_t noisePerf);
 
 BaseType_t IMUControllerUpdateIMUSettings(uint8_t index);
 
