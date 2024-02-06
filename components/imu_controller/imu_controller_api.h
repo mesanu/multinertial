@@ -65,7 +65,8 @@ typedef struct __attribute__ ((packed)) {
 typedef struct {
     uint8_t devIndex;
     IMUState_t devState;
-    IMUFIFOData_t FIFOData;
+    int64_t headUsTimestamp;
+    int64_t tailUsTimestamp;
     struct bmi2_dev dev;
     struct bmi2_sens_config accelConfig;
     struct bmi2_sens_config gyroConfig;
@@ -107,8 +108,6 @@ BaseType_t IMUControllerGetOneShotData(uint8_t index, IMUOneShotData_t *data);
 
 void IMUControllerContinuousSamplingTask(void *arg);
 
-BaseType_t IMUControllerWaitOnData(uint8_t *index);
-
-IMUFIFOData_t *IMUControllerGetFIFODataPtr(uint8_t index);
+BaseType_t IMUControllerGetFIFODataPtr(IMUFIFOData_t **data);
 
 #endif /* IMU_CONTROLLER_API_H */

@@ -4,12 +4,13 @@
 #include "esp_log.h"
 
 #include "freertos/FreeRTOS.h"
-#include "freertos/event_groups.h"
 #include "freertos/task.h"
 #include "freertos/queue.h"
 
 #include "driver/gpio.h"
 #include "esp_timer.h"
+
+#define QUEUE_SIZE 128
 
 static IMUDevice_t internalConfigs[CONFIG_IMU_CONTROLLER_MAX_SUPPORTED_UNITS];
 static uint8_t FIFOBuffer[IMU_FIFO_ALLOC_SIZE] = {0};
@@ -22,8 +23,7 @@ static const uint8_t sensor_list[2] = {BMI2_ACCEL, BMI2_GYRO};
 
 
 static QueueHandle_t fifoReadyQueue;
-static EventGroupHandle_t fifoRecievedEventGroup;
-static EventBits_t eventGroupMask = 0;
+static QueueHandle_t dataReadyQueue;
 
 static float lsbToMeas(int16_t val, float range, uint8_t bitWidth) {
     return (val * range) / (float)(1 << (bitWidth-1));
@@ -83,9 +83,9 @@ static void parseFIFOBuffer(IMUFIFOData_t *FIFOData, uint8_t *inputBuffer, uint1
 
 static void fifoReadyISRCallback(void *arg) {
     IMUDevice_t *imu = (IMUDevice_t *)arg;
-    imu->FIFOData.tailUsTimestamp = imu->FIFOData.headUsTimestamp;
-    imu->FIFOData.headUsTimestamp = esp_timer_get_time();
     gpio_intr_disable(imu->interruptGPIO);
+    imu->tailUsTimestamp = imu->headUsTimestamp;
+    imu->headUsTimestamp = esp_timer_get_time();
     xQueueSendFromISR(fifoReadyQueue, &arg, NULL);
 }
 
@@ -94,7 +94,8 @@ BaseType_t IMUControllerInit(void) {
     int8_t rslt;
     gpio_config_t interruptPinConf;
 
-    fifoReadyQueue = xQueueCreate(CONFIG_IMU_CONTROLLER_MAX_SUPPORTED_UNITS, sizeof(BaseType_t));
+    fifoReadyQueue = xQueueCreate(QUEUE_SIZE, sizeof(BaseType_t));
+    dataReadyQueue = xQueueCreate(QUEUE_SIZE, sizeof(BaseType_t));
 
     for (i = 0; i < CONFIG_IMU_CONTROLLER_MAX_SUPPORTED_UNITS; i++) {
         if (internalConfigs[i].devState == IMU_STATE_SPI_CONFIGURED) {
@@ -124,16 +125,13 @@ BaseType_t IMUControllerInit(void) {
             interruptPinConf.pull_up_en = 1;
 
             gpio_config(&interruptPinConf);
-            gpio_set_intr_type(internalConfigs[i].interruptGPIO, GPIO_INTR_LOW_LEVEL);
+            gpio_set_intr_type(internalConfigs[i].interruptGPIO, GPIO_INTR_NEGEDGE);
             gpio_isr_handler_add(internalConfigs[i].interruptGPIO, fifoReadyISRCallback, &internalConfigs[i]);
         
-            eventGroupMask |= (1 << i);
             internalConfigs[i].devIndex = i;
-            internalConfigs[i].FIFOData.devIndex = i;
             internalConfigs[i].devState = IMU_STATE_INITIALIZED;
         }
     }
-    fifoRecievedEventGroup = xEventGroupCreate();
     ESP_LOGI(TAG, "All IMUs initialized successfully");
     return pdTRUE;
 }
@@ -149,7 +147,6 @@ BaseType_t IMUControllerConfigSetSPI(uint8_t index, spi_host_device_t spiHost, i
     internalConfigs[index].interfaceConfig.spiInterfaceConfig.mode = 0;
     internalConfigs[index].interfaceConfig.spiInterfaceConfig.spics_io_num = csPin;
     internalConfigs[index].interfaceConfig.spiInterfaceConfig.queue_size = 1;
-    internalConfigs[index].interfaceConfig.spiSemaphore = xSemaphoreCreateMutex();
 
     internalConfigs[index].accelConfig.type = BMI2_ACCEL;
     internalConfigs[index].gyroConfig.type = BMI2_GYRO;
@@ -168,90 +165,81 @@ BaseType_t IMUControllerSetConfigAccelRange(uint8_t range) {
     for (int i = 0; i < CONFIG_IMU_CONTROLLER_MAX_SUPPORTED_UNITS; i++) {
         if (internalConfigs[i].devState == IMU_STATE_INITIALIZED) {
             internalConfigs[i].accelConfig.cfg.acc.range = range;
-            return pdTRUE;
         }
     }
-    return pdFALSE;
+    return pdTRUE;
 }
 
 BaseType_t IMUControllerSetConfigAccelODR(uint8_t odr) {
     for (int i = 0; i < CONFIG_IMU_CONTROLLER_MAX_SUPPORTED_UNITS; i++) {
         if (internalConfigs[i].devState == IMU_STATE_INITIALIZED) {
             internalConfigs[i].accelConfig.cfg.acc.odr = odr;
-            return pdTRUE;
         }
     }
-    return pdFALSE;
+    return pdTRUE;
 }
 
 BaseType_t IMUControllerSetConfigAccelFilterBWP(uint8_t bwp) {
     for (int i = 0; i < CONFIG_IMU_CONTROLLER_MAX_SUPPORTED_UNITS; i++) {
         if (internalConfigs[i].devState == IMU_STATE_INITIALIZED) {
             internalConfigs[i].accelConfig.cfg.acc.bwp = bwp;
-            return pdTRUE;
         }
     }
-    return pdFALSE;
+    return pdTRUE;
 }
 
 BaseType_t IMUControllerSetConfigAccelFilterPerf(uint8_t filterPerf) {
     for (int i = 0; i < CONFIG_IMU_CONTROLLER_MAX_SUPPORTED_UNITS; i++) {
         if (internalConfigs[i].devState == IMU_STATE_INITIALIZED) {
             internalConfigs[i].accelConfig.cfg.acc.bwp = filterPerf;
-            return pdTRUE;
         }
     }
-    return pdFALSE;
+    return pdTRUE;
 }
 
 BaseType_t IMUControllerSetConfigGyroRange(uint8_t range) {
     for (int i = 0; i < CONFIG_IMU_CONTROLLER_MAX_SUPPORTED_UNITS; i++) {
         if (internalConfigs[i].devState == IMU_STATE_INITIALIZED) {
             internalConfigs[i].gyroConfig.cfg.gyr.range = range;
-            return pdTRUE;
         }
     }
-    return pdFALSE;
+    return pdTRUE;
 }
 
 BaseType_t IMUControllerSetConfigGyroODR(uint8_t odr) {
     for (int i = 0; i < CONFIG_IMU_CONTROLLER_MAX_SUPPORTED_UNITS; i++) {
         if (internalConfigs[i].devState == IMU_STATE_INITIALIZED) {
             internalConfigs[i].gyroConfig.cfg.gyr.odr = odr;
-            return pdTRUE;
         }
     }
-    return pdFALSE;
+    return pdTRUE;
 }
 
 BaseType_t IMUControllerSetConfigGyroFilterBWP(uint8_t bwp) {
     for (int i = 0; i < CONFIG_IMU_CONTROLLER_MAX_SUPPORTED_UNITS; i++) {
         if (internalConfigs[i].devState == IMU_STATE_INITIALIZED) {
             internalConfigs[i].gyroConfig.cfg.gyr.bwp = bwp;
-            return pdTRUE;
         }
     }
-    return pdFALSE;
+    return pdTRUE;
 }
 
 BaseType_t IMUControllerSetConfigGyroFilterPerf(uint8_t filterPerf) {
     for (int i = 0; i < CONFIG_IMU_CONTROLLER_MAX_SUPPORTED_UNITS; i++) {
         if (internalConfigs[i].devState == IMU_STATE_INITIALIZED) {
             internalConfigs[i].gyroConfig.cfg.gyr.filter_perf = filterPerf;
-            return pdTRUE;
         }
     }
-    return pdFALSE;
+    return pdTRUE;
 }
 
 BaseType_t IMUControllerSetConfigGyroNoisePerf(uint8_t noisePerf) {
     for (int i = 0; i < CONFIG_IMU_CONTROLLER_MAX_SUPPORTED_UNITS; i++) {
         if (internalConfigs[i].devState == IMU_STATE_INITIALIZED) {
             internalConfigs[i].gyroConfig.cfg.gyr.noise_perf = noisePerf;
-            return pdTRUE;
         }
     }
-    return pdFALSE;
+    return pdTRUE;
 }
 
 BaseType_t IMUControllerUpdateIMUSettings(uint8_t index) {
@@ -271,6 +259,7 @@ BaseType_t IMUControllerUpdateIMUSettings(uint8_t index) {
         }
         return pdTRUE;
     }
+    ESP_LOGE(TAG, "Sensor not initialized %d", index);
     return pdFALSE;
 }
 
@@ -375,11 +364,6 @@ BaseType_t IMUControllerStopContinuousSampling(void) {
 
     for (i = 0; i < CONFIG_IMU_CONTROLLER_MAX_SUPPORTED_UNITS; i++) {
         if (internalConfigs[i].devState == IMU_STATE_SAMPLING_PAUSED) {
-            if(xSemaphoreTake(internalConfigs[i].interfaceConfig.spiSemaphore, 1000/portTICK_PERIOD_MS) == pdFALSE) {
-                ESP_LOGE(TAG, "Failed to reserve spi semaphore in time IMU %d", i);
-                return pdFALSE;
-            }
-            xSemaphoreGive(internalConfigs[i].interfaceConfig.spiSemaphore);
             rslt = bmi2_sensor_disable(&sensor_list, 2, &internalConfigs[i].dev);
             if (rslt != BMI2_OK) {
                 bmi2_error_codes_print_result(rslt);
@@ -413,6 +397,7 @@ void IMUControllerContinuousSamplingTask(void *arg) {
 
     while(1) {
         IMUDevice_t *imu;
+        IMUFIFOData_t *dataPtr;
         if (xQueueReceive(fifoReadyQueue, &imu, portMAX_DELAY)) {
             rslt = bmi2_get_fifo_length(&fifoLength, &imu->dev);
             bmi2_error_codes_print_result(rslt);
@@ -431,14 +416,20 @@ void IMUControllerContinuousSamplingTask(void *arg) {
              * size even with the watermark set */
             if(imu->devState == IMU_STATE_SAMPLING_FIFO_INIT) {
                 imu->devState = IMU_STATE_SAMPLING_FIFO_RUNNING;
+                imu->headUsTimestamp = esp_timer_get_time();
                 gpio_intr_enable(imu->interruptGPIO);
-                imu->FIFOData.headUsTimestamp = esp_timer_get_time();
                 continue;
             }
-            parseFIFOBuffer(&imu->FIFOData, FIFOBuffer, FIFOFrame.length);
+
+            dataPtr = (IMUFIFOData_t *)pvPortMalloc(sizeof(IMUFIFOData_t));
+            dataPtr->devIndex = imu->devIndex;
+            dataPtr->headUsTimestamp = imu->headUsTimestamp;
+            dataPtr->tailUsTimestamp = imu->tailUsTimestamp;
+
+            parseFIFOBuffer(dataPtr, FIFOBuffer, FIFOFrame.length);
 
             if((imu->devState != IMU_STATE_SAMPLING_PAUSED)) {
-                xEventGroupSetBits(fifoRecievedEventGroup, (1 << imu->devIndex));
+                xQueueSend(dataReadyQueue, &dataPtr, 1);
                 gpio_intr_enable(imu->interruptGPIO);
             }
         } else {
@@ -478,20 +469,6 @@ BaseType_t IMUControllerGetOneShotData(uint8_t index, IMUOneShotData_t*data) {
     return pdTRUE;
 }
 
-BaseType_t IMUControllerWaitOnData(uint8_t *index) {
-    uint8_t i;
-    EventBits_t eventBits = xEventGroupWaitBits(fifoRecievedEventGroup, eventGroupMask, pdFALSE, pdFALSE, portMAX_DELAY);
-    if(eventGroupMask != 0){
-        for (i=0; i<CONFIG_IMU_CONTROLLER_MAX_SUPPORTED_UNITS; i++){
-            if((1 << i) & eventBits) {
-                *index = i;
-                xEventGroupClearBits(fifoRecievedEventGroup, (1 << i));
-            }
-        }
-    }
-    return pdTRUE;
-}
-
-IMUFIFOData_t *IMUControllerGetFIFODataPtr(uint8_t index) {
-    return &internalConfigs[index].FIFOData;
+BaseType_t IMUControllerGetFIFODataPtr(IMUFIFOData_t **data) {
+    return xQueueReceive(dataReadyQueue, data, portMAX_DELAY);
 }

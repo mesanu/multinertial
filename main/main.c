@@ -42,8 +42,8 @@
 #define PIN_CAL_BUTTON 2
 
 #define PORT                        3333
-#define KEEPALIVE_IDLE              5
-#define KEEPALIVE_INTERVAL          5
+#define KEEPALIVE_IDLE              2
+#define KEEPALIVE_INTERVAL          1
 #define KEEPALIVE_COUNT             3
 
 #define ESP_INTR_FLAG_DEFAULT 0
@@ -257,7 +257,6 @@ static MainCommand_t getCommand(int sock) {
 
 void app_main(void)
 {
-    uint8_t imuIndex;
     IMUFIFOData_t *data;
     int sock = -1;
     BaseType_t sampling = pdFALSE;
@@ -290,11 +289,9 @@ void app_main(void)
     IMUControllerConfigSetSPI(2, SPI2_HOST, PIN_NUM_CS_2, PIN_INT_2);
     IMUControllerInit();
     IMUControllerSetConfigAccelRange(BMI2_ACC_RANGE_2G);
-    IMUControllerSetConfigAccelODR(BMI2_ACC_ODR_400HZ);
     IMUControllerSetConfigAccelFilterBWP(BMI2_ACC_NORMAL_AVG4);
     IMUControllerSetConfigAccelFilterPerf(BMI2_PERF_OPT_MODE);
     IMUControllerSetConfigGyroRange(BMI2_GYR_RANGE_500);
-    IMUControllerSetConfigGyroODR(BMI2_GYR_ODR_400HZ);
     IMUControllerSetConfigGyroFilterBWP(BMI2_GYR_NORMAL_MODE);
     IMUControllerSetConfigGyroFilterPerf(BMI2_PERF_OPT_MODE);
     IMUControllerSetConfigGyroNoisePerf(BMI2_PERF_OPT_MODE);
@@ -327,9 +324,10 @@ void app_main(void)
                 }
                 IMUControllerStartContinuousSampling();
                 sampling = pdTRUE;
-                IMUControllerWaitOnData(&imuIndex);
-                data = IMUControllerGetFIFODataPtr(imuIndex);
-                send(sock, data, sizeof(IMUFIFOData_t), 0);
+                if(IMUControllerGetFIFODataPtr(&data)){
+                    send(sock, data, sizeof(IMUFIFOData_t), 0);
+                    vPortFree(data);
+                }
             } else if (command == MAIN_COMMAND_CAL_TOGGLE) {
                 if(calMode == pdTRUE) {
                     calMode = pdFALSE;
@@ -353,9 +351,10 @@ void app_main(void)
                     led_strip_refresh(ledStrip);
                 }
             } else {
-                IMUControllerWaitOnData(&imuIndex);
-                data = IMUControllerGetFIFODataPtr(imuIndex);
-                send(sock, data, sizeof(IMUFIFOData_t), 0);
+                if(IMUControllerGetFIFODataPtr(&data)){
+                    send(sock, data, sizeof(IMUFIFOData_t), 0);
+                    vPortFree(data);
+                }
             }
         }
     }
