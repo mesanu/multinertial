@@ -151,6 +151,7 @@ static BaseType_t wifiInit(void) {
                                                         &instanceGotIp));
 
     ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
+    ESP_ERROR_CHECK(esp_wifi_set_ps(WIFI_PS_NONE));
     ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_STA, &wifiConfig) );
     ESP_ERROR_CHECK(esp_wifi_start() );
 
@@ -183,6 +184,9 @@ static void socketCreate(int *sock) {
     int keepIdle = KEEPALIVE_IDLE;
     int keepInterval = KEEPALIVE_INTERVAL;
     int keepCount = KEEPALIVE_COUNT;
+    int noDelay = 1;
+
+    int sendBufSize = 16384;
     int sockErr = 0;
     struct sockaddr_storage destAddr;
 
@@ -224,9 +228,11 @@ static void socketCreate(int *sock) {
     }
 
     setsockopt(*sock, SOL_SOCKET, SO_KEEPALIVE, &keepAlive, sizeof(int));
+    setsockopt(*sock, SOL_SOCKET, SO_SNDBUF, &sendBufSize, sizeof(int));
     setsockopt(*sock, IPPROTO_TCP, TCP_KEEPIDLE, &keepIdle, sizeof(int));
     setsockopt(*sock, IPPROTO_TCP, TCP_KEEPINTVL, &keepInterval, sizeof(int));
     setsockopt(*sock, IPPROTO_TCP, TCP_KEEPCNT, &keepCount, sizeof(int));
+    setsockopt(*sock, IPPROTO_TCP, TCP_NODELAY, &noDelay, sizeof(int));
 }
 
 static MainCommand_t getCommand(int sock) {
@@ -285,19 +291,22 @@ void app_main(void)
     gpio_install_isr_service(ESP_INTR_FLAG_DEFAULT);
 
     IMUControllerConfigSetSPI(0, SPI2_HOST, PIN_NUM_CS_0, PIN_INT_0);
-    IMUControllerConfigSetSPI(1, SPI2_HOST, PIN_NUM_CS_1, PIN_INT_1);
-    IMUControllerConfigSetSPI(2, SPI2_HOST, PIN_NUM_CS_2, PIN_INT_2);
+    IMUControllerConfigSetSPI(1, SPI2_HOST, PIN_NUM_CS_2, PIN_INT_2);
+    //IMUControllerConfigSetSPI(2, SPI2_HOST, PIN_NUM_CS_2, PIN_INT_2);
     IMUControllerInit();
     IMUControllerSetConfigAccelRange(BMI2_ACC_RANGE_2G);
     IMUControllerSetConfigAccelFilterBWP(BMI2_ACC_NORMAL_AVG4);
     IMUControllerSetConfigAccelFilterPerf(BMI2_PERF_OPT_MODE);
+    IMUControllerSetConfigAccelODR(BMI2_ACC_ODR_400HZ);
     IMUControllerSetConfigGyroRange(BMI2_GYR_RANGE_500);
     IMUControllerSetConfigGyroFilterBWP(BMI2_GYR_NORMAL_MODE);
     IMUControllerSetConfigGyroFilterPerf(BMI2_PERF_OPT_MODE);
     IMUControllerSetConfigGyroNoisePerf(BMI2_PERF_OPT_MODE);
+    IMUControllerSetConfigGyroODR(BMI2_GYR_ODR_400HZ);
     IMUControllerUpdateIMUSettings(0);
     IMUControllerUpdateIMUSettings(1);
-    IMUControllerUpdateIMUSettings(2);
+    //IMUControllerUpdateIMUSettings(2);
+    IMUControllerConfigContinuousSampling();
     xTaskCreate(IMUControllerContinuousSamplingTask, "IMU FIFO task", 8192, NULL, 10, NULL);
 
     if(wifiConnected){
@@ -324,10 +333,6 @@ void app_main(void)
                 }
                 IMUControllerStartContinuousSampling();
                 sampling = pdTRUE;
-                if(IMUControllerGetFIFODataPtr(&data)){
-                    send(sock, data, sizeof(IMUFIFOData_t), 0);
-                    vPortFree(data);
-                }
             } else if (command == MAIN_COMMAND_CAL_TOGGLE) {
                 if(calMode == pdTRUE) {
                     calMode = pdFALSE;
@@ -341,7 +346,8 @@ void app_main(void)
             } else {
                 vTaskDelay(1);
             }
-        } else if (sampling == pdTRUE) {
+        }
+        if (sampling == pdTRUE) {
             if(command == MAIN_COMMAND_STOP) {
                 IMUControllerStopContinuousSampling();
                 sampling = pdFALSE;
@@ -352,6 +358,7 @@ void app_main(void)
                 }
             } else {
                 if(IMUControllerGetFIFODataPtr(&data)){
+                    ESP_LOGI(TAG, "Sent %d", data->devIndex);
                     send(sock, data, sizeof(IMUFIFOData_t), 0);
                     vPortFree(data);
                 }

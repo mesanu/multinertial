@@ -161,85 +161,76 @@ BaseType_t IMUControllerConfigSetSPI(uint8_t index, spi_host_device_t spiHost, i
     return pdTRUE;
 }
 
-BaseType_t IMUControllerSetConfigAccelRange(uint8_t range) {
+void IMUControllerSetConfigAccelRange(uint8_t range) {
     for (int i = 0; i < CONFIG_IMU_CONTROLLER_MAX_SUPPORTED_UNITS; i++) {
         if (internalConfigs[i].devState == IMU_STATE_INITIALIZED) {
             internalConfigs[i].accelConfig.cfg.acc.range = range;
         }
     }
-    return pdTRUE;
 }
 
-BaseType_t IMUControllerSetConfigAccelODR(uint8_t odr) {
+void IMUControllerSetConfigAccelODR(uint8_t odr) {
     for (int i = 0; i < CONFIG_IMU_CONTROLLER_MAX_SUPPORTED_UNITS; i++) {
         if (internalConfigs[i].devState == IMU_STATE_INITIALIZED) {
             internalConfigs[i].accelConfig.cfg.acc.odr = odr;
         }
     }
-    return pdTRUE;
 }
 
-BaseType_t IMUControllerSetConfigAccelFilterBWP(uint8_t bwp) {
+void IMUControllerSetConfigAccelFilterBWP(uint8_t bwp) {
     for (int i = 0; i < CONFIG_IMU_CONTROLLER_MAX_SUPPORTED_UNITS; i++) {
         if (internalConfigs[i].devState == IMU_STATE_INITIALIZED) {
             internalConfigs[i].accelConfig.cfg.acc.bwp = bwp;
         }
     }
-    return pdTRUE;
 }
 
-BaseType_t IMUControllerSetConfigAccelFilterPerf(uint8_t filterPerf) {
+void IMUControllerSetConfigAccelFilterPerf(uint8_t filterPerf) {
     for (int i = 0; i < CONFIG_IMU_CONTROLLER_MAX_SUPPORTED_UNITS; i++) {
         if (internalConfigs[i].devState == IMU_STATE_INITIALIZED) {
             internalConfigs[i].accelConfig.cfg.acc.bwp = filterPerf;
         }
     }
-    return pdTRUE;
 }
 
-BaseType_t IMUControllerSetConfigGyroRange(uint8_t range) {
+void IMUControllerSetConfigGyroRange(uint8_t range) {
     for (int i = 0; i < CONFIG_IMU_CONTROLLER_MAX_SUPPORTED_UNITS; i++) {
         if (internalConfigs[i].devState == IMU_STATE_INITIALIZED) {
             internalConfigs[i].gyroConfig.cfg.gyr.range = range;
         }
     }
-    return pdTRUE;
 }
 
-BaseType_t IMUControllerSetConfigGyroODR(uint8_t odr) {
+void IMUControllerSetConfigGyroODR(uint8_t odr) {
     for (int i = 0; i < CONFIG_IMU_CONTROLLER_MAX_SUPPORTED_UNITS; i++) {
         if (internalConfigs[i].devState == IMU_STATE_INITIALIZED) {
             internalConfigs[i].gyroConfig.cfg.gyr.odr = odr;
         }
     }
-    return pdTRUE;
 }
 
-BaseType_t IMUControllerSetConfigGyroFilterBWP(uint8_t bwp) {
+void IMUControllerSetConfigGyroFilterBWP(uint8_t bwp) {
     for (int i = 0; i < CONFIG_IMU_CONTROLLER_MAX_SUPPORTED_UNITS; i++) {
         if (internalConfigs[i].devState == IMU_STATE_INITIALIZED) {
             internalConfigs[i].gyroConfig.cfg.gyr.bwp = bwp;
         }
     }
-    return pdTRUE;
 }
 
-BaseType_t IMUControllerSetConfigGyroFilterPerf(uint8_t filterPerf) {
+void IMUControllerSetConfigGyroFilterPerf(uint8_t filterPerf) {
     for (int i = 0; i < CONFIG_IMU_CONTROLLER_MAX_SUPPORTED_UNITS; i++) {
         if (internalConfigs[i].devState == IMU_STATE_INITIALIZED) {
             internalConfigs[i].gyroConfig.cfg.gyr.filter_perf = filterPerf;
         }
     }
-    return pdTRUE;
 }
 
-BaseType_t IMUControllerSetConfigGyroNoisePerf(uint8_t noisePerf) {
+void IMUControllerSetConfigGyroNoisePerf(uint8_t noisePerf) {
     for (int i = 0; i < CONFIG_IMU_CONTROLLER_MAX_SUPPORTED_UNITS; i++) {
         if (internalConfigs[i].devState == IMU_STATE_INITIALIZED) {
             internalConfigs[i].gyroConfig.cfg.gyr.noise_perf = noisePerf;
         }
     }
-    return pdTRUE;
 }
 
 BaseType_t IMUControllerUpdateIMUSettings(uint8_t index) {
@@ -278,12 +269,12 @@ BaseType_t IMUControllerEnableIMU(uint8_t index) {
     return pdFALSE;
 }
 
-BaseType_t IMUControllerStartContinuousSampling(void) {
+BaseType_t IMUControllerConfigContinuousSampling(void) {
     int8_t rslt = BMI2_OK;
 
     for (int i = 0; i < CONFIG_IMU_CONTROLLER_MAX_SUPPORTED_UNITS; i++) {
         if ((internalConfigs[i].devState == IMU_STATE_INITIALIZED) || (internalConfigs[i].devState == IMU_STATE_SAMPLING_PAUSED)) {
-            ESP_LOGI(TAG, "Starting sampling on IMU %d", i);
+            ESP_LOGI(TAG, "Configuring continuous samping IMU %d", i);
             /* Get default configuration for hardware Interrupt */
             rslt = bmi2_get_int_pin_config(&pinConfig, &internalConfigs[i].dev);
             if (rslt != BMI2_OK) {
@@ -335,7 +326,18 @@ BaseType_t IMUControllerStartContinuousSampling(void) {
                 ESP_LOGE(TAG, "Couldn't enable FIFO IMU %d", i);
                 return pdFALSE;
             }
+        }
+    }
+    return pdFALSE;
+}
 
+BaseType_t IMUControllerStartContinuousSampling(void) {
+    int8_t rslt = BMI2_OK;
+
+    for (int i = 0; i < CONFIG_IMU_CONTROLLER_MAX_SUPPORTED_UNITS; i++) {
+        ESP_LOGI(TAG, "IMU state %d, %d", i, internalConfigs[i].devState);
+        if ((internalConfigs[i].devState == IMU_STATE_INITIALIZED) || (internalConfigs[i].devState == IMU_STATE_SAMPLING_PAUSED)) {
+            ESP_LOGI(TAG, "Starting sampling IMU %d", i);
             rslt = bmi2_sensor_enable(&sensor_list, 2, &internalConfigs[i].dev);
             if (rslt != BMI2_OK) {
                 bmi2_error_codes_print_result(rslt);
@@ -346,7 +348,7 @@ BaseType_t IMUControllerStartContinuousSampling(void) {
             gpio_intr_enable(internalConfigs[i].interruptGPIO);
         }
     }
-    return pdFALSE;
+    return pdTRUE;
 }
 
 BaseType_t IMUControllerStopContinuousSampling(void) {
@@ -415,6 +417,7 @@ void IMUControllerContinuousSamplingTask(void *arg) {
              * frames, accel only frames, etc, and is the wrong
              * size even with the watermark set */
             if(imu->devState == IMU_STATE_SAMPLING_FIFO_INIT) {
+                ESP_LOGI(TAG, "Skipped %d", imu->devIndex);
                 imu->devState = IMU_STATE_SAMPLING_FIFO_RUNNING;
                 imu->headUsTimestamp = esp_timer_get_time();
                 gpio_intr_enable(imu->interruptGPIO);
@@ -448,8 +451,8 @@ BaseType_t IMUControllerGetOneShotData(uint8_t index, IMUOneShotData_t*data) {
 
     /* This works because all the gyro ranges can be calculated by deviding 2000 by powers of 2 */
     float gyroDPSRange = (2000/(1 << internalConfigs[index].gyroConfig.cfg.gyr.range));
-    if (1) {
-    //if (internalConfigs[index].devState == IMU_STATE_SAMPLING_SINGLE) {
+
+    if (internalConfigs[index].devState == IMU_STATE_SAMPLING_SINGLE) {
         rslt = bmi2_get_sensor_data(&sens_data, &internalConfigs[index].dev);
         bmi2_error_codes_print_result(rslt);
 

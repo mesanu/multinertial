@@ -74,40 +74,243 @@ typedef struct {
     int interruptGPIO;
 } IMUDevice_t;
 
+/* --------------------
+ * IMUControllerInit
+ *
+ * Initializes the BMI270 interface, reads chip IDs and part configs,
+ * sets up (but does not enable) ESP32 interrupt pin
+ * 
+ * returns: pdFALSE if initialization fails, pdTRUE otherwise
+ * -------------------- */
 BaseType_t IMUControllerInit(void);
 
+/* --------------------
+ * IMUControllerConfigSetSPI
+ *
+ * Sets up internal struct for SPI comms for individual parts
+ * 
+ * index: Assigned index of the IMU. Cannot exceed
+ *        CONFIG_IMU_CONTROLLER_MAX_SUPPORTED_UNITS
+ * spiHost: ESP32 SPI host to use for communications. Only
+ *          SPI2_HOST should be used on ESP32C3
+ * csPin: GPIO pin to use for the chip select line
+ * interruptGPIO: GPIO pin to use for the FIFO ready interrupt
+ * 
+ * returns: pdFALSE if an IMU with a given index is already
+ *          configured
+ * -------------------- */
 BaseType_t IMUControllerConfigSetSPI(uint8_t index, spi_host_device_t spiHost, int csPin, int interruptGPIO);
 
-BaseType_t IMUControllerSetConfigAccelRange(uint8_t range);
+/* --------------------
+ * IMUControllerSetConfigAccelRange
+ *
+ * Sets the dynamic range of the accelerometer for all SPI configured
+ * parts.
+ * 
+ * NOTE: Settings will not be updated until
+ * IMUControllerUpdateIMUSettings is called
+ * 
+ * range: Accelerometer G range to use, as defined in bmi2_defs.h
+ * -------------------- */
+void IMUControllerSetConfigAccelRange(uint8_t range);
 
-BaseType_t IMUControllerSetConfigAccelODR(uint8_t odr);
+/* --------------------
+ * IMUControllerSetConfigAccelRange
+ *
+ * Sets the output data rate for the accelerometer for all SPI
+ * configured parts.
+ * 
+ * NOTE: Settings will not be updated until
+ * IMUControllerUpdateIMUSettings is called
+ * 
+ * odr: Accelerometer ODR to use, as defined in bmi2_defs.h
+ * -------------------- */
+void IMUControllerSetConfigAccelODR(uint8_t odr);
 
-BaseType_t IMUControllerSetConfigAccelFilterBWP(uint8_t bwp);
+/* --------------------
+ * IMUControllerSetConfigAccelFilterBWP
+ *
+ * Sets the accelerometer filter mode for all SPI configured
+ * parts.
+ * 
+ * NOTE: Settings will not be updated until
+ * IMUControllerUpdateIMUSettings is called
+ * 
+ * bwp: Accelerometer ODR to use, as defined in bmi2_defs.h
+ * -------------------- */
+void IMUControllerSetConfigAccelFilterBWP(uint8_t bwp);
 
-BaseType_t IMUControllerSetConfigAccelFilterPerf(uint8_t filterPerf);
+/* --------------------
+ * IMUControllerSetConfigAccelFilterPerf
+ *
+ * Sets the accelerometer filter performance mode for all
+ * SPI configured parts
+ * 
+ * NOTE: Settings will not be updated until
+ * IMUControllerUpdateIMUSettings is called
+ * 
+ * filterPerf: Accelerometer filter performance mode to use,
+ * as defined in bmi2_defs.h
+ * -------------------- */
+void IMUControllerSetConfigAccelFilterPerf(uint8_t filterPerf);
 
-BaseType_t IMUControllerSetConfigGyroRange(uint8_t range);
+/* --------------------
+ * IMUControllerSetConfigGyroRange
+ *
+ * Sets the dynamic range of the gyroscope for all SPI configured
+ * parts.
+ * 
+ * NOTE: Settings will not be updated until
+ * IMUControllerUpdateIMUSettings is called
+ * 
+ * range: Gyroscope DPS range to use, as defined in bmi2_defs.h
+ * -------------------- */
+void IMUControllerSetConfigGyroRange(uint8_t range);
 
-BaseType_t IMUControllerSetConfigGyroODR(uint8_t odr);
+/* --------------------
+ * IMUControllerSetConfigGyroODR
+ *
+ * Sets the output data rate for the gyroscope for all SPI
+ * configured parts.
+ * 
+ * NOTE: Settings will not be updated until
+ * IMUControllerUpdateIMUSettings is called
+ * 
+ * odr: Gyroscope ODR to use, as defined in bmi2_defs.h
+ * -------------------- */
+void IMUControllerSetConfigGyroODR(uint8_t odr);
 
-BaseType_t IMUControllerSetConfigGyroFilterBWP(uint8_t bwp);
+/* --------------------
+ * IMUControllerSetConfigGyroFilterBWP
+ *
+ * Sets the gyroscope filter mode for all SPI configured
+ * parts.
+ * 
+ * NOTE: Settings will not be updated until
+ * IMUControllerUpdateIMUSettings is called
+ * 
+ * bwp: Gyroscope ODR to use, as defined in bmi2_defs.h
+ * -------------------- */
+void IMUControllerSetConfigGyroFilterBWP(uint8_t bwp);
 
-BaseType_t IMUControllerSetConfigGyroFilterPerf(uint8_t filterPerf);
+/* --------------------
+ * IMUControllerSetConfigGyroFilterPerf
+ *
+ * Sets the gyroscope filter performance mode for all
+ * SPI configured parts
+ * 
+ * NOTE: Settings will not be updated until
+ * IMUControllerUpdateIMUSettings is called
+ * 
+ * filterPerf: Gyroscope filter performance mode to use,
+ * as defined in bmi2_defs.h
+ * -------------------- */
+void IMUControllerSetConfigGyroFilterPerf(uint8_t filterPerf);
 
-BaseType_t IMUControllerSetConfigGyroNoisePerf(uint8_t noisePerf);
+/* --------------------
+ * IMUControllerSetConfigGyroNoisePerf
+ *
+ * Sets the gyroscope noise performance mode for all
+ * SPI configured parts
+ * 
+ * NOTE: Settings will not be updated until
+ * IMUControllerUpdateIMUSettings is called
+ * 
+ * filterPerf: Gyroscope noise performance mode to use,
+ * as defined in bmi2_defs.h
+ * -------------------- */
+void IMUControllerSetConfigGyroNoisePerf(uint8_t noisePerf);
 
+/* --------------------
+ * IMUControllerUpdateIMUSettings
+ *
+ * Updates the IMUs with the appropriate settings and sets
+ * appropriate registers via SPI
+ * 
+ * index: Index identifier of the IMU to update
+ * 
+ * returns: pdFALSE if update fails, pdTRUE otherwise
+ * -------------------- */
 BaseType_t IMUControllerUpdateIMUSettings(uint8_t index);
 
+/* --------------------
+ * IMUControllerEnableIMU
+ *
+ * Enables the sensors IMU for single sample mode
+ * 
+ * index: Index identifier of the IMU to update
+ * 
+ * returns: pdFALSE if update fails, pdTRUE otherwise
+ * -------------------- */
 BaseType_t IMUControllerEnableIMU(uint8_t index);
 
+/* --------------------
+ * IMUControllerConfigContinuousSampling
+ *
+ * Configures the FIFO and IMU pin interrupt for each
+ * SPI configured IMU, and enables the ESP32 pin interrupt
+ * 
+ * returns: pdFALSE if config fails, pdTRUE otherwise
+ * -------------------- */
+BaseType_t IMUControllerConfigContinuousSampling(void);
+
+/* --------------------
+ * IMUControllerStartContinuousSampling
+ *
+ * Starts sampling on all configured and initialized IMUs
+ * with FIFO interrupts
+ * 
+ * returns: pdFALSE if enabling fails, pdTRUE otherwise
+ * -------------------- */
 BaseType_t IMUControllerStartContinuousSampling(void);
 
+/* --------------------
+ * IMUControllerStopContinuousSampling
+ *
+ * Stops sampling for all configured IMUs and dumps, then
+ * tosses any samples remaining in the FIFO at the time sampling
+ * is stipped
+ * 
+ * returns: pdFALSE if stopping fails, pdTRUE otherwise
+ * -------------------- */
 BaseType_t IMUControllerStopContinuousSampling(void);
 
+/* --------------------
+ * IMUControllerStopContinuousSampling
+ *
+ * Stops sampling for all configured IMUs and dumps, then
+ * tosses any samples remaining in the FIFO at the time sampling
+ * is stopped
+ * 
+ * returns: pdFALSE if stopping fails, pdTRUE otherwise
+ * -------------------- */
 BaseType_t IMUControllerGetOneShotData(uint8_t index, IMUOneShotData_t *data);
 
+/* --------------------
+ * IMUControllerContinuousSamplingTask
+ *
+ * IMU controller task that responds to FIFO watermark interrupts,
+ * extracts the data from the part, parses the data into an
+ * IMUFIFOData_t structure and places a pointer to the struct
+ * in an output queue
+ * 
+ * arg: dummy argument, not used
+ * -------------------- */
 void IMUControllerContinuousSamplingTask(void *arg);
 
+/* --------------------
+ * IMUControllerGetFIFODataPtr
+ *
+ * Extracts a pointer from the internal data output queue
+ * that points to a FIFO of data from an IMU. Blocking function
+ * that will wait for portMAX_DELAY for data
+ * 
+ * data: A pointer to a pointer of FIFO data that will point to
+ * an extracted FIFO
+ * 
+ * returns: pdFALSE if there is a timeout waitinf for data,
+ *          pdTRUE otherwise
+ * -------------------- */
 BaseType_t IMUControllerGetFIFODataPtr(IMUFIFOData_t **data);
 
 #endif /* IMU_CONTROLLER_API_H */
