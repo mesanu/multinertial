@@ -178,15 +178,8 @@ static BaseType_t wifiInit(void) {
 }
 
 static void socketCreate(int *sock) {
-    int addrFamily = AF_INET;
-    int ipProtocol = 0;
-    int keepAlive = 1;
-    int keepIdle = KEEPALIVE_IDLE;
-    int keepInterval = KEEPALIVE_INTERVAL;
-    int keepCount = KEEPALIVE_COUNT;
-    int noDelay = 1;
+    int opt;
 
-    int sendBufSize = 16384;
     int sockErr = 0;
     struct sockaddr_storage destAddr;
 
@@ -194,22 +187,20 @@ static void socketCreate(int *sock) {
     destAddrIp4->sin_addr.s_addr = htonl(INADDR_ANY);
     destAddrIp4->sin_family = AF_INET;
     destAddrIp4->sin_port = htons(PORT);
-    ipProtocol = IPPROTO_IP;
 
-    int listenSock = socket(addrFamily, SOCK_STREAM, ipProtocol);
+    int listenSock = socket(AF_INET, SOCK_STREAM, IPPROTO_IP);
     if (listenSock < 0) {
         ESP_LOGE(TAG, "Unable to create socket: errno %d", errno);
         vTaskDelete(NULL);
         return;
     }
-    int opt = 1;
+    opt = 1;
     setsockopt(listenSock, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
     ESP_LOGI(TAG, "Socket created");
 
     sockErr = bind(listenSock, (struct sockaddr *)&destAddr, sizeof(destAddr));
     if (sockErr != 0) {
         ESP_LOGE(TAG, "Socket unable to bind: errno %d", errno);
-        ESP_LOGE(TAG, "IPPROTO: %d", addrFamily);
     }
     ESP_LOGI(TAG, "Socket bound, port %d", PORT);
 
@@ -227,12 +218,16 @@ static void socketCreate(int *sock) {
         ESP_LOGI(TAG, "Accepted connection");
     }
 
-    setsockopt(*sock, SOL_SOCKET, SO_KEEPALIVE, &keepAlive, sizeof(int));
-    setsockopt(*sock, SOL_SOCKET, SO_SNDBUF, &sendBufSize, sizeof(int));
-    setsockopt(*sock, IPPROTO_TCP, TCP_KEEPIDLE, &keepIdle, sizeof(int));
-    setsockopt(*sock, IPPROTO_TCP, TCP_KEEPINTVL, &keepInterval, sizeof(int));
-    setsockopt(*sock, IPPROTO_TCP, TCP_KEEPCNT, &keepCount, sizeof(int));
-    setsockopt(*sock, IPPROTO_TCP, TCP_NODELAY, &noDelay, sizeof(int));
+    opt = 1;
+    setsockopt(*sock, SOL_SOCKET, SO_KEEPALIVE, &opt, sizeof(int));
+    opt = KEEPALIVE_IDLE;
+    setsockopt(*sock, IPPROTO_TCP, TCP_KEEPIDLE, &opt, sizeof(int));
+    opt = KEEPALIVE_INTERVAL;
+    setsockopt(*sock, IPPROTO_TCP, TCP_KEEPINTVL, &opt, sizeof(int));
+    opt = KEEPALIVE_COUNT;
+    setsockopt(*sock, IPPROTO_TCP, TCP_KEEPCNT, &opt, sizeof(int));
+    opt = 1;
+    setsockopt(*sock, IPPROTO_TCP, TCP_NODELAY, &opt, sizeof(int));
 }
 
 static MainCommand_t getCommand(int sock) {
@@ -292,7 +287,6 @@ void app_main(void)
 
     IMUControllerConfigSetSPI(0, SPI2_HOST, PIN_NUM_CS_0, PIN_INT_0);
     IMUControllerConfigSetSPI(1, SPI2_HOST, PIN_NUM_CS_2, PIN_INT_2);
-    //IMUControllerConfigSetSPI(2, SPI2_HOST, PIN_NUM_CS_2, PIN_INT_2);
     IMUControllerInit();
     IMUControllerSetConfigAccelRange(BMI2_ACC_RANGE_2G);
     IMUControllerSetConfigAccelFilterBWP(BMI2_ACC_NORMAL_AVG4);
@@ -305,7 +299,6 @@ void app_main(void)
     IMUControllerSetConfigGyroODR(BMI2_GYR_ODR_400HZ);
     IMUControllerUpdateIMUSettings(0);
     IMUControllerUpdateIMUSettings(1);
-    //IMUControllerUpdateIMUSettings(2);
     IMUControllerConfigContinuousSampling();
     xTaskCreate(IMUControllerContinuousSamplingTask, "IMU FIFO task", 8192, NULL, 10, NULL);
 
