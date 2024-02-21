@@ -226,8 +226,6 @@ static void socketCreate(int *sock) {
     setsockopt(*sock, IPPROTO_TCP, TCP_KEEPINTVL, &opt, sizeof(int));
     opt = KEEPALIVE_COUNT;
     setsockopt(*sock, IPPROTO_TCP, TCP_KEEPCNT, &opt, sizeof(int));
-    opt = 1;
-    setsockopt(*sock, IPPROTO_TCP, TCP_NODELAY, &opt, sizeof(int));
 }
 
 static MainCommand_t getCommand(int sock) {
@@ -351,7 +349,6 @@ void app_main(void)
                 }
             } else {
                 if(IMUControllerGetFIFODataPtr(&data)){
-                    ESP_LOGI(TAG, "Sent %d", data->devIndex);
                     send(sock, data, sizeof(IMUFIFOData_t), 0);
                     vPortFree(data);
                 }
